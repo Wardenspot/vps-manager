@@ -32,7 +32,11 @@ object NK {
 fun NordKeyTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = NK.Accent, onPrimary = Color.White,
+            primary = Color(0xFF4A86F7), onPrimary = Color.White,
+            primaryContainer = NK.AccentSoft, onPrimaryContainer = NK.AccentText,
+            secondaryContainer = NK.AccentSoft, onSecondaryContainer = NK.AccentText,
+            surfaceContainerHighest = NK.Surface, surfaceContainerLow = NK.Surface, surfaceContainerLowest = NK.Bg,
+            inverseSurface = NK.Text, inverseOnSurface = NK.Bg,
             secondary = NK.Link, background = NK.Bg, onBackground = NK.Text,
             surface = NK.Surface, onSurface = NK.Text, surfaceVariant = NK.Surface, onSurfaceVariant = NK.Muted,
             outline = NK.Line, error = NK.Bad, surfaceContainer = NK.Surface, surfaceContainerHigh = NK.Surface,
