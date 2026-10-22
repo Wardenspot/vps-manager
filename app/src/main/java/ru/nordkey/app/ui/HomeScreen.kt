@@ -36,6 +36,7 @@ sealed interface Scr {
     data object Broadcast : Scr
     data object NewClient : Scr
     data object Assistant : Scr
+    data class Incident(val id: Long) : Scr
 }
 
 class Nav(private val stack: SnapshotStateList<Scr>) {
@@ -82,6 +83,7 @@ fun HomeScreen(onLogout: () -> Unit) {
                     Scr.Broadcast -> BroadcastScreen(nav)
                     Scr.NewClient -> NewClientScreen(nav)
                     Scr.Assistant -> AssistantScreen(nav, withBar = true)
+                    is Scr.Incident -> IncidentScreen(top.id, me, nav)
                 }
             } else {
                 Tabs(me, json, nav, onLogout, meLoad.reload)
@@ -96,6 +98,7 @@ private fun Tabs(me: Me, json: JSONObject, nav: Nav, onLogout: () -> Unit, reloa
         if (me.staff) {
             add(Tab("Главная", Icons.Default.Home) { n, m -> DashboardScreen(m, n) })
             add(Tab("Клиенты", Icons.Default.Router) { n, m -> ClientsScreen(m, n) })
+            add(Tab("Автопилот", Icons.Default.SmartToy) { n, m -> AutopilotScreen(m, n) })
             if (me.can("ai")) add(Tab("ИИ", Icons.Default.AutoAwesome) { n, _ -> AssistantScreen(n, withBar = false) })
         } else {
             add(Tab("Роутеры", Icons.Default.Router) { n, m -> MyRoutersScreen(m, n, withBar = false) })

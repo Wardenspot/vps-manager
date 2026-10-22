@@ -45,6 +45,7 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
     var live by remember { mutableStateOf<JSONObject?>(null) }
     var dialog by remember { mutableStateOf<RDialog?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var investigate by remember { mutableStateOf(false) }
     val act = rememberAction()
     val ctx = LocalContext.current
 
@@ -171,6 +172,9 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                         ActionTile("Написать клиенту", Icons.Default.Send, Modifier.weight(1f), enabled = me.can("msg")) { dialog = RDialog.Msg }
                         ActionTile("Продлить подписку", Icons.Default.EventRepeat, Modifier.weight(1f), enabled = me.can("subs.edit")) { dialog = RDialog.Extend }
                     }
+                    OutlinedButton(onClick = { investigate = true }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.ManageSearch, null); Spacer(Modifier.width(6.dp)); Text("Глубокая проверка сайта (автопилот)")
+                    }
                     if (me.can("newclient")) OutlinedButton(onClick = {
                         act { val x = Api.post("/v1/staff/claim", "ip" to ip); shareText(ctx, "Ваша персональная ссылка NordKey (пробный период ${x.optInt("trial_hours")} ч): ${x.getString("url")}"); null }
                     }, modifier = Modifier.fillMaxWidth()) { Text("Персональная ссылка на бота для клиента") }
@@ -201,6 +205,7 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
         }
     }
 
+    if (investigate) ru.nordkey.app.ui.staff.InvestigateDialog(ip, nav) { investigate = false }
     when (val d = dialog) {
         null -> {}
         is RDialog.Ask -> InputDialog(

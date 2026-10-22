@@ -26,7 +26,8 @@ import ru.nordkey.app.net.*
 import ru.nordkey.app.ui.*
 import ru.nordkey.app.util.*
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
 private fun time(ts: Long): String = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date(ts * 1000))
 
@@ -350,44 +351,105 @@ fun NewClientScreen(nav: Nav) {
 }
 
 // ───────── ИИ-помощник ─────────
+private data class AiMsg(val mine: Boolean, val text: String, val actions: List<JSONObject> = emptyList())
+
+private fun actionTitle(a: JSONObject): String {
+    val ip = a.optString("ip"); val d = a.optString("domain")
+    return when (a.optString("action")) {
+        "restart" -> "Перезапустить туннель $ip"
+        "fix" -> "Починить роутер $ip (nk-fix)"
+        "site_vpn" -> "Пустить $d через VPN ($ip)"
+        "site_direct" -> "Пустить $d напрямую ($ip)"
+        "wifi_optimize" -> "Оптимизировать Wi-Fi $ip"
+        else -> a.optString("action")
+    }
+}
+
+/** Выполнить действие, предложенное ИИ. Возвращает id задачи (если долгая) или текст результата. */
+private suspend fun runAiAction(a: JSONObject): Pair<String?, String?> {
+    val ip = a.optString("ip"); val d = a.optString("domain")
+    if (!Regex("""10\.66\.66\.\d{1,3}""").matches(ip)) return null to "Неверный адрес роутера"
+    return when (a.optString("action")) {
+        "restart" -> { Api.post("/v1/staff/agent/routers/$ip/restart"); null to "Туннель перезапускается" }
+        "fix" -> Api.post("/v1/routers/$ip/fix").getString("job") to null
+        "site_vpn", "site_direct" -> {
+            val r = Api.post("/v1/routers/$ip/site", "action" to (if (a.optString("action") == "site_vpn") "vpn" else "direct"), "domain" to d)
+            null to (if (r.optBoolean("ok")) "Готово: $d ${if (a.optString("action") == "site_vpn") "через VPN" else "напрямую"}" else r.optString("error"))
+        }
+        "wifi_optimize" -> { Api.post("/v1/staff/agent/routers/$ip/wifi/optimize"); null to "Wi-Fi оптимизирован" }
+        else -> null to "Это действие из приложения недоступно"
+    }
+}
+
 @Composable
 fun AssistantScreen(nav: Nav, withBar: Boolean) {
     val act = rememberAction()
-    val msgs = remember { mutableStateListOf<Pair<Boolean, String>>() }
+    val msgs = remember { mutableStateListOf<AiMsg>() }
     var text by rememberSaveable { mutableStateOf("") }
     var thinking by remember { mutableStateOf(false) }
+    var confirm by remember { mutableStateOf<JSONObject?>(null) }
+    var job by remember { mutableStateOf<String?>(null) }
     val list = rememberLazyListState()
-    LaunchedEffect(msgs.size) { if (msgs.isNotEmpty()) list.animateScrollToItem(msgs.size - 1) }
+    LaunchedEffect(msgs.size, thinking) { if (msgs.isNotEmpty()) list.animateScrollToItem(msgs.size - 1) }
     Column(Modifier.fillMaxSize()) {
-        NkTopBar("ИИ-помощник", "Gemini · видит роутеры, тревоги и логи", onBack = if (withBar) nav::back else null)
+        NkTopBar("ИИ-помощник", "Gemini · видит роутеры, тревоги и логи", onBack = if (withBar) nav::back else null) {
+            if (msgs.isNotEmpty()) TextButton(onClick = { msgs.clear() }) { Text("Новый чат") }
+        }
         LazyColumn(Modifier.weight(1f), state = list, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (msgs.isEmpty()) item {
-                Text("Спросите, например: «Почему у Анны тормозит интернет?», «Кто сейчас офлайн?»", color = NK.Muted)
+                Text("Спросите, например: «Почему у Анны тормозит интернет?», «Кто сейчас офлайн?». " +
+                     "Если помощник предложит действие — под ответом появится кнопка.", color = NK.Muted)
             }
-            items(msgs) { (mine, t) ->
-                Box(Modifier.fillMaxWidth(), contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart) {
-                    Text(t, color = if (mine) androidx.compose.ui.graphics.Color.White else NK.Text, fontSize = 15.sp,
-                         modifier = Modifier.widthIn(max = 320.dp).clip(RoundedCornerShape(16.dp))
-                             .background(if (mine) NK.Accent else NK.Surface).padding(12.dp))
+            items(msgs) { m ->
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = if (m.mine) Alignment.End else Alignment.Start,
+                       verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(m.text, color = if (m.mine) androidx.compose.ui.graphics.Color.White else NK.Text, fontSize = 15.sp,
+                         modifier = Modifier.widthIn(max = 330.dp).clip(RoundedCornerShape(16.dp))
+                             .background(if (m.mine) NK.Accent else NK.Surface).padding(12.dp))
+                    m.actions.forEach { a ->
+                        NkCard(bg = NK.AccentSoft, border = NK.Accent, modifier = Modifier.widthIn(max = 330.dp)) {
+                            Text("Предлагаю действие", color = NK.AccentText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(actionTitle(a), fontWeight = FontWeight.SemiBold)
+                            a.str("reason")?.let { Text(it, color = NK.Muted, fontSize = 13.sp) }
+                            Button(onClick = { confirm = a }, modifier = Modifier.fillMaxWidth()) { Text("Выполнить") }
+                        }
+                    }
                 }
             }
-            if (thinking) item { Text("Думаю…", color = NK.Muted) }
+            if (thinking) item { Text("Думаю… (если Google перегружен — до минуты)", color = NK.Muted) }
         }
         Row(Modifier.fillMaxWidth().background(NK.Bar).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(text, { text = it }, Modifier.weight(1f), placeholder = { Text("Вопрос про клиента или сервер") }, maxLines = 4)
             Spacer(Modifier.width(8.dp))
             FilledIconButton(enabled = text.isNotBlank() && !thinking, onClick = {
-                val qn = text.trim(); text = ""; msgs.add(true to qn); thinking = true
+                val qn = text.trim(); text = ""
+                // история — чтобы «да», «а у второго?» и т.п. понимались в контексте
+                val history = org.json.JSONArray().apply {
+                    msgs.takeLast(10).forEach { put(obj("role" to (if (it.mine) "user" else "model"), "text" to it.text.take(1500))) }
+                }
+                msgs.add(AiMsg(true, qn)); thinking = true
                 act {
                     try {
-                        val r = Api.post("/v1/staff/agent/ai/ask", "question" to qn)
-                        msgs.add(false to (r.str("answer") ?: r.str("text") ?: r.toString(2)))
+                        val r = Api.post("/v1/staff/agent/ai/ask", "question" to qn, "history" to history)
+                        msgs.add(AiMsg(false, r.str("answer") ?: "Пустой ответ", r.optJSONArray("actions").objects()))
                         null
                     } catch (e: Exception) {
-                        msgs.add(false to "⚠️ ${e.message}"); null
+                        msgs.add(AiMsg(false, "⚠️ ${e.message}")); null
                     } finally { thinking = false }
                 }
             }) { Icon(Icons.Default.Send, "Отправить") }
         }
     }
+    confirm?.let { a ->
+        ConfirmDialog("Выполнить?", actionTitle(a) + (a.str("reason")?.let { "\n\n$it" } ?: ""), "Выполнить", onDismiss = { confirm = null }) {
+            confirm = null
+            act {
+                val (jid, msg) = runAiAction(a)
+                if (jid != null) job = jid
+                msg?.let { msgs.add(AiMsg(false, "✅ $it")) }
+                msg
+            }
+        }
+    }
+    job?.let { JobDialog(it, "Выполняю") { job = null } }
 }
