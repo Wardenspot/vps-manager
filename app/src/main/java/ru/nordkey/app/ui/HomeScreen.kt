@@ -37,6 +37,8 @@ sealed interface Scr {
     data object NewClient : Scr
     data object Assistant : Scr
     data class Incident(val id: Long) : Scr
+    data class Account(val tg: Long) : Scr
+    data object SupportInbox : Scr
 }
 
 class Nav(private val stack: SnapshotStateList<Scr>) {
@@ -84,6 +86,8 @@ fun HomeScreen(onLogout: () -> Unit) {
                     Scr.NewClient -> NewClientScreen(nav)
                     Scr.Assistant -> AssistantScreen(nav, withBar = true)
                     is Scr.Incident -> IncidentScreen(top.id, me, nav)
+                    is Scr.Account -> AccountScreen(top.tg, me, nav)
+                    Scr.SupportInbox -> SupportInboxScreen(nav)
                 }
             } else {
                 Tabs(me, json, nav, onLogout, meLoad.reload)

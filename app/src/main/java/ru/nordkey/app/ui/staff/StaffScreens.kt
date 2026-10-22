@@ -126,7 +126,7 @@ fun ClientsScreen(me: Me, nav: Nav) {
                 okQ && okF
             }
             Column(Modifier.padding(horizontal = 16.dp)) {
-                OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Имя или IP") },
+                OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Имя, IP или @ник") },
                                   leadingIcon = { Icon(Icons.Default.Search, null) })
                 Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     fun count(f: String) = all.count { c -> when (f) {
@@ -137,8 +137,25 @@ fun ClientsScreen(me: Me, nav: Nav) {
                     }
                 }
             }
+            var accounts by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+            LaunchedEffect(q) {
+                accounts = emptyList()
+                if (q.trim().length >= 3) {
+                    kotlinx.coroutines.delay(400)
+                    accounts = try { Api.get("/v1/staff/find?q=" + java.net.URLEncoder.encode(q.trim(), "UTF-8")).optJSONArray("found").objects() } catch (e: Exception) { emptyList() }
+                }
+            }
             LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(shown) { c -> RouterRow(c) { nav.go(Scr.Router(c.getString("ip"))) } }
+                if (accounts.isNotEmpty()) item { SectionTitle("Аккаунты в боте") }
+                items(accounts) { a ->
+                    NkCard(onClick = { nav.go(Scr.Account(a.optLong("tg_id"))) }) {
+                        Text((a.str("name") ?: "Без имени") + (a.str("username")?.let { "  @$it" } ?: ""), fontWeight = FontWeight.SemiBold)
+                        val s = a.optJSONObject("subscription")
+                        Text("ID ${a.optLong("tg_id")} · " + (if (s?.optBoolean("active") == true) "подписка до ${dateRu(s.str("expires_at"))}" else "без подписки") +
+                             (a.optJSONArray("routers")?.takeIf { it.length() > 0 }?.let { " · роутер ${it.getString(0)}" } ?: ""), color = NK.Muted, fontSize = 12.sp)
+                    }
+                }
             }
         }
     }
@@ -350,37 +367,25 @@ fun NewClientScreen(nav: Nav) {
     }
 }
 
-// ───────── ИИ-помощник ─────────
-private data class AiMsg(val mine: Boolean, val text: String, val actions: List<JSONObject> = emptyList())
+// ───────── ИИ-оператор ─────────
+private data class AiMsg(val mine: Boolean, val text: String, val done: List<JSONObject> = emptyList(),
+                         val pending: List<JSONObject> = emptyList(), val escalated: Long = 0)
 
-private fun actionTitle(a: JSONObject): String {
-    val ip = a.optString("ip"); val d = a.optString("domain")
-    return when (a.optString("action")) {
-        "restart" -> "Перезапустить туннель $ip"
-        "fix" -> "Починить роутер $ip (nk-fix)"
-        "site_vpn" -> "Пустить $d через VPN ($ip)"
-        "site_direct" -> "Пустить $d напрямую ($ip)"
-        "wifi_optimize" -> "Оптимизировать Wi-Fi $ip"
-        else -> a.optString("action")
-    }
-}
+private val TOOL_RU = mapOf(
+    "site_route" to "маршрут сайта", "fix_router" to "починка роутера", "dns_split" to "российский DNS для сайта",
+    "google_via_vpn" to "Google через VPN", "restart_tunnel" to "перезапуск туннеля")
 
-/** Выполнить действие, предложенное ИИ. Возвращает id задачи (если долгая) или текст результата. */
-private suspend fun runAiAction(a: JSONObject): Pair<String?, String?> {
-    val ip = a.optString("ip"); val d = a.optString("domain")
-    if (!Regex("""10\.66\.66\.\d{1,3}""").matches(ip)) return null to "Неверный адрес роутера"
-    return when (a.optString("action")) {
-        "restart" -> { Api.post("/v1/staff/agent/routers/$ip/restart"); null to "Туннель перезапускается" }
-        "fix" -> Api.post("/v1/routers/$ip/fix").getString("job") to null
-        "site_vpn", "site_direct" -> {
-            val r = Api.post("/v1/routers/$ip/site", "action" to (if (a.optString("action") == "site_vpn") "vpn" else "direct"), "domain" to d)
-            null to (if (r.optBoolean("ok")) "Готово: $d ${if (a.optString("action") == "site_vpn") "через VPN" else "напрямую"}" else r.optString("error"))
-        }
-        "wifi_optimize" -> { Api.post("/v1/staff/agent/routers/$ip/wifi/optimize"); null to "Wi-Fi оптимизирован" }
-        else -> null to "Это действие из приложения недоступно"
-    }
-}
+private val QUICK = listOf(
+    "Что сейчас горит?" to "Что сейчас горит? Разберись и почини, что можно.",
+    "Кто офлайн?" to "Какие роутеры сейчас не на связи?",
+    "Кончаются подписки" to "У кого подписка кончается в ближайшие 3 дня?",
+    "Перенести подписку" to "Перенеси подписку и конфиги с @ на @",
+    "Не работает сайт" to "У клиента  не работает сайт . Разберись и почини.",
+    "Продлить подписку" to "Продли подписку клиенту @ на 30 дней",
+    "Найти клиента" to "Найди клиента ",
+)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AssistantScreen(nav: Nav, withBar: Boolean) {
     val act = rememberAction()
@@ -388,17 +393,39 @@ fun AssistantScreen(nav: Nav, withBar: Boolean) {
     var text by rememberSaveable { mutableStateOf("") }
     var thinking by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf<JSONObject?>(null) }
-    var job by remember { mutableStateOf<String?>(null) }
+    val doneIds = remember { mutableStateListOf<String>() }
     val list = rememberLazyListState()
-    LaunchedEffect(msgs.size, thinking) { if (msgs.isNotEmpty()) list.animateScrollToItem(msgs.size - 1) }
+    LaunchedEffect(msgs.size, thinking) { if (msgs.isNotEmpty()) list.animateScrollToItem(msgs.size) }
+
+    fun send(q: String) {
+        val history = org.json.JSONArray().apply {
+            msgs.takeLast(12).forEach { put(obj("role" to (if (it.mine) "user" else "model"), "text" to it.text.take(1500))) }
+        }
+        msgs.add(AiMsg(true, q)); thinking = true
+        act {
+            try {
+                val r = Api.post("/v1/staff/ai/chat", "question" to q, "history" to history)
+                msgs.add(AiMsg(false, r.str("answer") ?: "…", r.optJSONArray("done").objects(), r.optJSONArray("pending").objects(),
+                               r.optLong("escalated", 0)))
+                null
+            } catch (e: Exception) {
+                msgs.add(AiMsg(false, "⚠️ ${e.message}")); null
+            } finally { thinking = false }
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
-        NkTopBar("ИИ-помощник", "Gemini · видит роутеры, тревоги и логи", onBack = if (withBar) nav::back else null) {
+        NkTopBar("ИИ-оператор", "сам проверяет и чинит; деньги и сообщения — по кнопке", onBack = if (withBar) nav::back else null) {
             if (msgs.isNotEmpty()) TextButton(onClick = { msgs.clear() }) { Text("Новый чат") }
         }
         LazyColumn(Modifier.weight(1f), state = list, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (msgs.isEmpty()) item {
-                Text("Спросите, например: «Почему у Анны тормозит интернет?», «Кто сейчас офлайн?». " +
-                     "Если помощник предложит действие — под ответом появится кнопка.", color = NK.Muted)
+                NkCard {
+                    Text("Что умею", fontWeight = FontWeight.SemiBold)
+                    Text("• найти клиента по @нику, имени или адресу\n• проверить и починить роутер, сайт, DNS\n" +
+                         "• пустить сайт через VPN или напрямую\n• перенести или продлить подписку, написать клиенту — по кнопке\n" +
+                         "• сложное — передам в Автопилот с готовым запросом для Claude", color = NK.Muted, fontSize = 14.sp)
+                }
             }
             items(msgs) { m ->
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = if (m.mine) Alignment.End else Alignment.Start,
@@ -406,50 +433,51 @@ fun AssistantScreen(nav: Nav, withBar: Boolean) {
                     Text(m.text, color = if (m.mine) androidx.compose.ui.graphics.Color.White else NK.Text, fontSize = 15.sp,
                          modifier = Modifier.widthIn(max = 330.dp).clip(RoundedCornerShape(16.dp))
                              .background(if (m.mine) NK.Accent else NK.Surface).padding(12.dp))
-                    m.actions.forEach { a ->
+                    m.done.forEach { d ->
+                        Chip((if (d.optBoolean("ok")) "✓ сделал: " else "✗ не вышло: ") + (TOOL_RU[d.optString("tool")] ?: d.optString("tool")),
+                             if (d.optBoolean("ok")) NK.OkText else NK.WarnText, if (d.optBoolean("ok")) NK.OkSoft else NK.WarnSoft)
+                    }
+                    m.pending.forEach { p ->
+                        val pid = p.optString("id")
                         NkCard(bg = NK.AccentSoft, border = NK.Accent, modifier = Modifier.widthIn(max = 330.dp)) {
-                            Text("Предлагаю действие", color = NK.AccentText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            Text(actionTitle(a), fontWeight = FontWeight.SemiBold)
-                            a.str("reason")?.let { Text(it, color = NK.Muted, fontSize = 13.sp) }
-                            Button(onClick = { confirm = a }, modifier = Modifier.fillMaxWidth()) { Text("Выполнить") }
+                            Text("Нужно ваше подтверждение", color = NK.AccentText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(p.optString("title"), fontWeight = FontWeight.SemiBold)
+                            p.optJSONObject("preview")?.let { Text(transferSummary(it), color = NK.Muted, fontSize = 13.sp) }
+                            if (pid in doneIds) Text("✓ Выполнено", color = NK.OkText)
+                            else Button(onClick = { confirm = p }, modifier = Modifier.fillMaxWidth()) { Text("Выполнить") }
                         }
                     }
+                    if (m.escalated > 0) OutlinedButton(onClick = { nav.go(Scr.Incident(m.escalated)) }) { Text("Открыть в Автопилоте") }
                 }
             }
-            if (thinking) item { Text("Думаю… (если Google перегружен — до минуты)", color = NK.Muted) }
+            if (thinking) item { Text("Проверяю… (до минуты, если нужно спросить роутер)", color = NK.Muted) }
+        }
+        androidx.compose.foundation.lazy.LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(QUICK) { (label, prompt) ->
+                AssistChip(onClick = {
+                    if (prompt.endsWith("?") || prompt.endsWith(".")) send(prompt) else text = prompt
+                }, label = { Text(label, fontSize = 12.sp) })
+            }
         }
         Row(Modifier.fillMaxWidth().background(NK.Bar).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(text, { text = it }, Modifier.weight(1f), placeholder = { Text("Вопрос про клиента или сервер") }, maxLines = 4)
+            OutlinedTextField(text, { text = it }, Modifier.weight(1f), placeholder = { Text("Что сделать? Например: перенеси подписку…") }, maxLines = 4)
             Spacer(Modifier.width(8.dp))
-            FilledIconButton(enabled = text.isNotBlank() && !thinking, onClick = {
-                val qn = text.trim(); text = ""
-                // история — чтобы «да», «а у второго?» и т.п. понимались в контексте
-                val history = org.json.JSONArray().apply {
-                    msgs.takeLast(10).forEach { put(obj("role" to (if (it.mine) "user" else "model"), "text" to it.text.take(1500))) }
-                }
-                msgs.add(AiMsg(true, qn)); thinking = true
-                act {
-                    try {
-                        val r = Api.post("/v1/staff/agent/ai/ask", "question" to qn, "history" to history)
-                        msgs.add(AiMsg(false, r.str("answer") ?: "Пустой ответ", r.optJSONArray("actions").objects()))
-                        null
-                    } catch (e: Exception) {
-                        msgs.add(AiMsg(false, "⚠️ ${e.message}")); null
-                    } finally { thinking = false }
-                }
-            }) { Icon(Icons.Default.Send, "Отправить") }
-        }
-    }
-    confirm?.let { a ->
-        ConfirmDialog("Выполнить?", actionTitle(a) + (a.str("reason")?.let { "\n\n$it" } ?: ""), "Выполнить", onDismiss = { confirm = null }) {
-            confirm = null
-            act {
-                val (jid, msg) = runAiAction(a)
-                if (jid != null) job = jid
-                msg?.let { msgs.add(AiMsg(false, "✅ $it")) }
-                msg
+            FilledIconButton(enabled = text.isNotBlank() && !thinking, onClick = { val q = text.trim(); text = ""; send(q) }) {
+                Icon(Icons.Default.Send, "Отправить")
             }
         }
     }
-    job?.let { JobDialog(it, "Выполняю") { job = null } }
+    confirm?.let { p ->
+        ConfirmDialog("Выполнить?", p.optString("title") + (p.optJSONObject("preview")?.let { "\n\n" + transferSummary(it) } ?: ""), "Выполнить",
+                      onDismiss = { confirm = null }) {
+            confirm = null
+            act {
+                val r = Api.post("/v1/staff/ai/approve", "id" to p.optString("id"))
+                doneIds.add(p.optString("id"))
+                val res = r.optJSONObject("result")
+                msgs.add(AiMsg(false, "✅ ${r.optString("title")}" + (res?.str("expires_at")?.let { " — до ${dateRu(it)}" } ?: "")))
+                null
+            }
+        }
+    }
 }

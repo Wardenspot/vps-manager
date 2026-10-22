@@ -35,6 +35,8 @@ private sealed interface RDialog {
     data object Extend : RDialog
     data class Job(val id: String, val title: String) : RDialog
     data class RemoveAccess(val tg: Long, val name: String) : RDialog
+    data object DnsSplit : RDialog
+    data object Reboot : RDialog
 }
 
 @Composable
@@ -172,6 +174,14 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                         ActionTile("Написать клиенту", Icons.Default.Send, Modifier.weight(1f), enabled = me.can("msg")) { dialog = RDialog.Msg }
                         ActionTile("Продлить подписку", Icons.Default.EventRepeat, Modifier.weight(1f), enabled = me.can("subs.edit")) { dialog = RDialog.Extend }
                     }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ActionTile("Российский DNS для сайта", Icons.Default.Dns, Modifier.weight(1f), enabled = me.can("routers.act")) { dialog = RDialog.DnsSplit }
+                        ActionTile("Перезагрузить роутер", Icons.Default.PowerSettingsNew, Modifier.weight(1f), risky = true,
+                                   enabled = me.can("routers.admin")) { dialog = RDialog.Reboot }
+                        r.optLong("owner_tg").takeIf { it > 0 }?.let { owner ->
+                            ActionTile("Аккаунт клиента", Icons.Default.Person, Modifier.weight(1f)) { nav.go(Scr.Account(owner)) }
+                        } ?: Spacer(Modifier.weight(1f))
+                    }
                     OutlinedButton(onClick = { investigate = true }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.ManageSearch, null); Spacer(Modifier.width(6.dp)); Text("Глубокая проверка сайта (автопилот)")
                     }
@@ -274,6 +284,16 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
             }
         }
         is RDialog.Job -> JobDialog(d.id, d.title) { dialog = null; load.reload() }
+        RDialog.DnsSplit -> InputDialog("Российский DNS для сайта", "Для этого сайта роутер будет спрашивать DNS Яндекса напрямую — сайт отдаст ближние " +
+                                        "российские серверы (помогает, когда российский сайт медленный или без картинок, как было с Авито).",
+                                        "avito.ru", "Включить", onDismiss = { dialog = null }) { dom ->
+            dialog = null
+            act { busy = true; try { val x = Api.post("/v1/staff/routers/$ip/dnssplit", "domain" to dom); if (x.optBoolean("ok")) "✅ Готово: $dom через российский DNS" else x.optString("error") } finally { busy = false } }
+        }
+        RDialog.Reboot -> ConfirmDialog("Перезагрузить роутер?", "Интернет у клиента пропадёт на 1–2 минуты.", "Перезагрузить", onDismiss = { dialog = null }) {
+            dialog = null
+            act { Api.post("/v1/staff/routers/$ip/reboot"); "Роутер перезагружается" }
+        }
         is RDialog.RemoveAccess -> ConfirmDialog("Убрать доступ?", "${d.name.ifBlank { "Этот аккаунт" }} больше не увидит роутер в приложении.",
                                                  "Убрать", onDismiss = { dialog = null }) {
             dialog = null; act { Api.post("/v1/routers/$ip/access/remove", "tg_id" to d.tg); load.reload(); "Доступ убран" }

@@ -180,22 +180,37 @@ fun SubscriptionScreen(nav: Nav, withBar: Boolean) {
     }
 }
 
-// ───────── поддержка ─────────
+// ───────── поддержка (переписка; отвечает ИИ, сложное — человек) ─────────
 @Composable
 fun SupportScreen(nav: Nav) {
     var text by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
+    val load = rememberLoad { Api.get("/v1/support") }
     val act = rememberAction()
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(5_000); load.reload() } }
     Column(Modifier.fillMaxSize()) {
-        NkTopBar("Поддержка", onBack = nav::back)
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Опишите проблему — ответ придёт в Telegram.", color = NK.Muted)
-            OutlinedTextField(text, { text = it }, Modifier.fillMaxWidth(), minLines = 5, placeholder = { Text("Например: не открывается YouTube на телевизоре") })
-            Button(enabled = text.isNotBlank() && !sending, modifier = Modifier.fillMaxWidth(), onClick = {
-                sending = true
-                act {
-                    try { Api.post("/v1/support", "text" to text); text = ""; "Отправлено. Ответим в Telegram." } finally { sending = false }
+        NkTopBar("Поддержка", "ответим здесь и в Telegram", onBack = nav::back)
+        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            val msgs = load.data?.optJSONArray("messages").objects()
+            if (msgs.isEmpty()) item {
+                Text("Опишите проблему — например «не открывается YouTube на телевизоре». Поддержка сразу проверит ваш роутер.", color = NK.Muted)
+            }
+            items(msgs) { m ->
+                val mine = m.optString("sender") == "client"
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
+                    Text(m.optString("text"), color = if (mine) Color.White else NK.Text, fontSize = 15.sp,
+                         modifier = Modifier.widthIn(max = 320.dp).clip(RoundedCornerShape(14.dp))
+                             .background(if (mine) NK.Accent else NK.Surface).padding(12.dp))
                 }
+            }
+            if (msgs.lastOrNull()?.optString("sender") == "client") item { Text("Проверяем…", color = NK.Muted) }
+        }
+        Row(Modifier.fillMaxWidth().background(NK.Bar).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(text, { text = it }, Modifier.weight(1f), placeholder = { Text("Сообщение") }, maxLines = 4)
+            Spacer(Modifier.width(8.dp))
+            Button(enabled = text.isNotBlank() && !sending, onClick = {
+                val t = text.trim(); text = ""; sending = true
+                act { try { Api.post("/v1/support", "text" to t); load.reload(); null } finally { sending = false } }
             }) { Text("Отправить") }
         }
     }
@@ -262,6 +277,7 @@ fun MoreScreen(me: Me, nav: Nav, onLogout: () -> Unit, reloadMe: () -> Unit) {
             }
             if (me.staff) {
                 SectionTitle("Работа")
+                if (me.can("msg")) MenuItem("Обращения в поддержку", Icons.Default.SupportAgent) { nav.go(Scr.SupportInbox) }
                 if (me.can("newclient")) MenuItem("Новый клиент — ссылка на бота", Icons.Default.PersonAdd) { nav.go(Scr.NewClient) }
                 if (me.can("bat")) MenuItem("Батник для настройки роутера", Icons.Default.Description) { nav.go(Scr.Bat) }
                 if (me.can("broadcast")) MenuItem("Рассылка клиентам", Icons.Default.Campaign) { nav.go(Scr.Broadcast) }
