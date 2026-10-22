@@ -60,7 +60,8 @@ fun AutopilotScreen(me: Me, nav: Nav) {
                     NkCard {
                         val canSet = me.can("routers.admin")
                         listOf("enabled" to "Автопилот включён", "auto_fix" to "Чинить простое сам", "ai_support" to "ИИ отвечает клиентам в поддержке",
-                               "ai_triage" to "ИИ разбирает сложные случаи", "notify" to "Сообщать в Telegram").forEach { (k, t) ->
+                               "ai_triage" to "ИИ разбирает сложные случаи", "auto_sites" to "Сам пускать заблокированные сайты через VPN",
+                               "notify_sites" to "Сообщать клиенту, что сайт включён", "notify" to "Сообщать мне в Telegram").forEach { (k, t) ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(t, Modifier.weight(1f))
                                 Switch(checked = s.optBoolean(k, true), enabled = canSet, onCheckedChange = { v ->
