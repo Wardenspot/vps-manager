@@ -65,7 +65,7 @@ jobs:
           }
           Copy-Item $dll cmd/nordkey/wintun.dll
       - name: Значок
-        run: go run github.com/akavel/rsrc@v0.10.2 -arch amd64 -ico build/icon.ico -o cmd/nordkey/rsrc_windows_amd64.syso
+        run: go run github.com/akavel/rsrc@v0.10.2 -arch amd64 -ico assets/icon.ico -o cmd/nordkey/rsrc_windows_amd64.syso
       - name: Сборка
         run: |
           $v = "0.1.${{ github.run_number }}"
