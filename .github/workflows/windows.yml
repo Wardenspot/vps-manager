@@ -1,0 +1,88 @@
+name: Приложение для Windows
+
+on:
+  push:
+    branches: [main]
+    paths: ["windows/**", ".github/workflows/windows.yml"]
+  pull_request:
+    paths: ["windows/**", ".github/workflows/windows.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - name: Зависимости
+        run: |
+          go get github.com/amnezia-vpn/amneziawg-go@v0.2.19
+          go get golang.zx2c4.com/wireguard/windows@6ece77bc487c8aa697e3c092197621c4f3e5ccb8
+          go mod tidy
+      - name: Тесты (ядро маршрутизации, DNS, служба, окно)
+        run: |
+          go vet ./...
+          go test -race ./internal/...
+          GOOS=windows go vet ./internal/... ./ui/...
+
+  build:
+    needs: test
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: windows
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - name: Зависимости
+        run: |
+          go get github.com/amnezia-vpn/amneziawg-go@v0.2.19
+          go get golang.zx2c4.com/wireguard/windows@6ece77bc487c8aa697e3c092197621c4f3e5ccb8
+          go mod tidy
+      - name: wintun.dll (драйвер WireGuard; проверяем цифровую подпись WireGuard LLC)
+        run: |
+          Invoke-WebRequest https://www.wintun.net/builds/wintun-0.14.1.zip -OutFile "$env:RUNNER_TEMP\wintun.zip"
+          Expand-Archive "$env:RUNNER_TEMP\wintun.zip" -DestinationPath "$env:RUNNER_TEMP\wintun"
+          $dll = "$env:RUNNER_TEMP\wintun\wintun\bin\amd64\wintun.dll"
+          $sig = Get-AuthenticodeSignature $dll
+          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'WireGuard LLC') {
+            throw "wintun.dll: подпись не прошла проверку: $($sig.Status) $($sig.SignerCertificate.Subject)"
+          }
+          Copy-Item $dll cmd/nordkey/wintun.dll
+      - name: Значок
+        run: go run github.com/akavel/rsrc@v0.10.2 -arch amd64 -ico assets/icon.ico -o cmd/nordkey/rsrc_windows_amd64.syso
+      - name: Сборка
+        run: |
+          $v = "0.1.${{ github.run_number }}"
+          go build -trimpath -ldflags "-H windowsgui -s -w -X main.version=$v" -o NordKey.exe ./cmd/nordkey
+          Get-Item NordKey.exe | Format-List Name, Length
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NordKey-Windows-${{ github.run_number }}
+          path: windows/NordKey.exe
+      - name: Выпуск (постоянная ссылка на свежую версию)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-latest
+          name: NordKey для Windows
+          body: |
+            Свежая версия NordKey для Windows: 0.1.${{ github.run_number }}.
+            Скачать: NordKey.exe ниже. При первом запуске Windows спросит разрешение (нужно один раз — ставится VPN-служба).
+          make_latest: false
+          files: windows/NordKey.exe

@@ -1,0 +1,5 @@
+# скачивается при сборке (подписанный драйвер WireGuard)
+cmd/nordkey/wintun.dll
+*.syso
+*.exe
+nk-dev-data/
