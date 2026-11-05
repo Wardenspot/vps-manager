@@ -160,7 +160,7 @@ fun UpsScreen(nav: Nav) {
                 color = C.muted, fontSize = 13.sp, modifier = Modifier.padding(16.dp),
             )
             if (list.isEmpty()) {
-                Empty("ИБП не добавлен", "Подойдёт APC, подключённый по USB к Synology или к компьютеру с apcupsd, и любой ИБП с NUT.") {
+                Empty("ИБП не добавлен", "Подойдёт APC с сетевой картой (напрямую по IP), APC по USB к Synology или компьютеру с apcupsd, и любой ИБП с NUT.") {
                     Button(onClick = { edit = UpsDevice() }) { Text("Добавить ИБП") }
                 }
             }
@@ -211,15 +211,18 @@ fun UpsScreen(nav: Nav) {
             title = { Text(if (list.any { it.id == d.id }) "ИБП" else "Новый ИБП") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         UpsType.entries.forEach { t ->
                             FilterChip(d.type == t, { d = d.copy(type = t, port = t.port) }, { Text(t.title) })
                         }
                     }
                     Text(d.type.hint, color = C.muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 6.dp))
                     Field(d.name, { d = d.copy(name = it) }, "Название", hint = "ИБП серверная", modifier = Modifier.padding(0.dp))
-                    Field(d.host, { d = d.copy(host = it.trim()) }, "Адрес (IP NAS или компьютера)", hint = "192.168.1.10")
+                    Field(d.host, { d = d.copy(host = it.trim()) }, if (d.type == UpsType.SNMP) "IP сетевой карты ИБП" else "Адрес (IP NAS или компьютера)", hint = "192.168.1.10")
                     Field(d.port.toString(), { d = d.copy(port = it.filter(Char::isDigit).toIntOrNull() ?: d.type.port) }, "Порт", number = true)
+                    if (d.type == UpsType.SNMP) {
+                        Field(d.community, { d = d.copy(community = it.trim()) }, "SNMP community (пароль на чтение)", hint = "public")
+                    }
                     if (d.type == UpsType.NUT) {
                         Field(d.upsName, { d = d.copy(upsName = it.trim()) }, "Имя ИБП на сервере", hint = "ups")
                         Field(d.user, { d = d.copy(user = it.trim()) }, "Логин (необязательно)", hint = "monuser")

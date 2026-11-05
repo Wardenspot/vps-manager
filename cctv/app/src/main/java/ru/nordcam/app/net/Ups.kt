@@ -18,6 +18,11 @@ enum class UpsType(val title: String, val port: Int, val hint: String) {
     APCUPSD(
         "apcupsd (APC)", 3551,
         "Программа apcupsd на Windows/Linux, к которой ИБП APC подключён по USB. В apcupsd.conf: NETSERVER on, NISIP 0.0.0.0.",
+    ),
+    SNMP(
+        "Сетевая карта (SNMP)", 161,
+        "Прямо по IP сетевой карты ИБП (APC NMC, Eaton, Ippon и др.). В веб-интерфейсе APC: Конфигурация → Сеть → SNMPv1 → " +
+            "включить, в «Управление доступом» сообщество public, тип доступа «Чтение», адрес NMS 0.0.0.0.",
     );
 
     companion object {
@@ -34,11 +39,13 @@ data class UpsDevice(
     val upsName: String = "ups",
     val user: String = "",
     val pass: String = "",
+    /** SNMP community (пароль на чтение). */
+    val community: String = "public",
 ) {
     val title: String get() = name.ifBlank { "ИБП $host" }
 
     fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("type", type.name).put("host", host)
-        .put("port", port).put("upsName", upsName).put("user", user).put("pass", pass)
+        .put("port", port).put("upsName", upsName).put("user", user).put("pass", pass).put("community", community)
 
     companion object {
         fun from(o: JSONObject) = UpsDevice(
@@ -50,6 +57,7 @@ data class UpsDevice(
             upsName = o.optString("upsName", "ups"),
             user = o.optString("user"),
             pass = o.optString("pass"),
+            community = o.optString("community", "public"),
         )
     }
 }
@@ -93,6 +101,7 @@ object Ups {
         when (d.type) {
             UpsType.NUT -> nut(d)
             UpsType.APCUPSD -> apc(d)
+            UpsType.SNMP -> snmp(d)
         }
     } catch (e: java.net.ConnectException) {
         UpsStatus(false, "Порт ${d.port} закрыт — включён ли сетевой сервер ИБП?")
@@ -215,6 +224,71 @@ object Ups {
                 runtimeSec = timeLeftMin?.let { (it * 60).toInt() } ?: -1,
                 inputVolt = num("LINEV") ?: -1f,
                 model = vars["MODEL"].orEmpty(),
+            )
+        }
+    }
+
+    // ---------------------------------------------------------------- SNMP (сетевая карта ИБП)
+
+    private object Oid {
+        // APC PowerNet-MIB
+        const val APC_MODEL = "1.3.6.1.4.1.318.1.1.1.1.1.1.0"
+        const val APC_OUT_STATUS = "1.3.6.1.4.1.318.1.1.1.4.1.1.0"
+        const val APC_CHARGE = "1.3.6.1.4.1.318.1.1.1.2.2.1.0"
+        const val APC_RUNTIME = "1.3.6.1.4.1.318.1.1.1.2.2.3.0"
+        const val APC_LOAD = "1.3.6.1.4.1.318.1.1.1.4.2.3.0"
+        const val APC_IN_VOLT = "1.3.6.1.4.1.318.1.1.1.3.2.1.0"
+        const val APC_BATT_STATUS = "1.3.6.1.4.1.318.1.1.1.2.1.1.0"
+        const val APC_REPLACE = "1.3.6.1.4.1.318.1.1.1.2.2.4.0"
+        // Стандартный UPS-MIB (RFC 1628) — Eaton, Ippon, Powercom и др.
+        const val STD_MODEL = "1.3.6.1.2.1.33.1.1.2.0"
+        const val STD_BATT_STATUS = "1.3.6.1.2.1.33.1.2.1.0"
+        const val STD_MINUTES = "1.3.6.1.2.1.33.1.2.3.0"
+        const val STD_CHARGE = "1.3.6.1.2.1.33.1.2.4.0"
+        const val STD_IN_VOLT = "1.3.6.1.2.1.33.1.3.3.1.3.1"
+        const val STD_OUT_SOURCE = "1.3.6.1.2.1.33.1.4.1.0"
+        const val STD_LOAD = "1.3.6.1.2.1.33.1.4.4.1.5.1"
+    }
+
+    private fun snmp(d: UpsDevice): UpsStatus {
+        val community = d.community.ifBlank { "public" }
+        java.net.DatagramSocket().use { sock ->
+            sock.soTimeout = 2_500
+            val addr = java.net.InetAddress.getByName(d.host.trim())
+            fun get(oid: String): Any? = Snmp.get(sock, addr, d.port, community, oid)
+
+            val apcStatus = get(Oid.APC_OUT_STATUS)
+            if (apcStatus is Long) {
+                // upsBasicOutputStatus: 2 сеть, 3 батарея, 4 boost, 5..9 выключен/спит, 10 байпас, 12 trim
+                val battSt = get(Oid.APC_BATT_STATUS) as? Long
+                return UpsStatus(
+                    ok = true,
+                    onBattery = apcStatus == 3L,
+                    lowBattery = battSt == 3L,
+                    replaceBattery = (get(Oid.APC_REPLACE) as? Long) == 2L || battSt == 4L,
+                    overload = false,
+                    charge = (get(Oid.APC_CHARGE) as? Long)?.toInt() ?: -1,
+                    load = (get(Oid.APC_LOAD) as? Long)?.toInt() ?: -1,
+                    runtimeSec = (get(Oid.APC_RUNTIME) as? Long)?.let { (it / 100).toInt() } ?: -1,
+                    inputVolt = (get(Oid.APC_IN_VOLT) as? Long)?.toFloat() ?: -1f,
+                    model = (get(Oid.APC_MODEL) as? String).orEmpty().trim(),
+                )
+            }
+            val src = get(Oid.STD_OUT_SOURCE) as? Long
+                ?: throw Exception(
+                    if (apcStatus == null) "Сетевая карта не отвечает по SNMP — включите SNMPv1 и проверьте сообщество (community)"
+                    else "Карта отвечает, но не отдаёт данные ИБП",
+                )
+            val battSt = get(Oid.STD_BATT_STATUS) as? Long
+            return UpsStatus(
+                ok = true,
+                onBattery = src == 5L,
+                lowBattery = battSt == 3L || battSt == 4L,
+                charge = (get(Oid.STD_CHARGE) as? Long)?.toInt() ?: -1,
+                load = (get(Oid.STD_LOAD) as? Long)?.toInt() ?: -1,
+                runtimeSec = (get(Oid.STD_MINUTES) as? Long)?.let { (it * 60).toInt() } ?: -1,
+                inputVolt = (get(Oid.STD_IN_VOLT) as? Long)?.toFloat() ?: -1f,
+                model = (get(Oid.STD_MODEL) as? String).orEmpty().trim(),
             )
         }
     }
