@@ -63,6 +63,23 @@ class Store(private val ctx: Context) {
         if (cams.any { it.serverId == id }) saveCameras(cams.map { if (it.serverId == id) it.copy(serverId = "", serverCam = "", serverCamName = "") else it })
     }
 
+    // ---- ИБП ----
+    private val _ups = MutableStateFlow(
+        try { JSONArray(prefs.getString("ups", "[]")).mapObjects { ru.nordcam.app.net.UpsDevice.from(it) } } catch (e: Exception) { emptyList() },
+    )
+    val ups: StateFlow<List<ru.nordcam.app.net.UpsDevice>> = _ups
+
+    /** Последнее известное состояние каждого ИБП — для полосы внизу экрана. */
+    val upsStatus = MutableStateFlow<Map<String, ru.nordcam.app.net.UpsStatus>>(emptyMap())
+
+    @Synchronized
+    fun saveUps(list: List<ru.nordcam.app.net.UpsDevice>) {
+        val arr = JSONArray()
+        list.forEach { arr.put(it.toJson()) }
+        prefs.edit().putString("ups", arr.toString()).apply()
+        _ups.value = list
+    }
+
     private val eventsFile = File(ctx.filesDir, "events.json")
     private val _events = MutableStateFlow(loadEvents())
     val events: StateFlow<List<Event>> = _events

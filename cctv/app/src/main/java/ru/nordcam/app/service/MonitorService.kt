@@ -35,6 +35,9 @@ import ru.nordcam.app.data.MotionMode
 import ru.nordcam.app.data.RecordMode
 import ru.nordcam.app.net.Http
 import ru.nordcam.app.net.Mail
+import ru.nordcam.app.net.Ups
+import ru.nordcam.app.net.UpsStatus
+import ru.nordcam.app.ui.fmtRuntime
 import ru.nordcam.app.net.Telegram
 import java.io.File
 import java.text.SimpleDateFormat
@@ -72,6 +75,7 @@ class MonitorService : Service() {
         }
         if (watcher == null) {
             watcher = scope.launch {
+                launch { upsLoop() }
                 while (isActive) {
                     reconcile()
                     delay(3000)
@@ -253,6 +257,68 @@ class MonitorService : Service() {
                 )
             }
         }
+    }
+
+    // ------------------------------------------------------------------ ИБП
+
+    /** Опрос ИБП раз в 30 сек: тревога при переходе на батарею, разряде, перегрузке и восстановлении питания. */
+    private suspend fun upsLoop() {
+        val prev = HashMap<String, UpsStatus>()
+        val fails = HashMap<String, Int>()
+        while (alive()) {
+            app.store.ups.value.forEach { d ->
+                val s = Ups.query(d)
+                app.store.upsStatus.value = app.store.upsStatus.value + (d.id to s)
+                if (!s.ok) {
+                    val n = (fails[d.id] ?: 0) + 1
+                    fails[d.id] = n
+                    // Нет связи 2 минуты подряд — возможно, NAS уже выключился от разряда
+                    if (n == 4 && prev[d.id] != null) upsAlert(d.title, "Нет связи с ИБП «${d.title}»: ${s.error}")
+                    return@forEach
+                }
+                if ((fails[d.id] ?: 0) >= 4) upsAlert(d.title, "Связь с ИБП «${d.title}» восстановлена: ${s.charge}%, ${s.stateText}")
+                fails[d.id] = 0
+                val p = prev[d.id]
+                if (p != null) {
+                    val msg = when {
+                        s.lowBattery && !p.lowBattery -> "Батарея ИБП «${d.title}» почти разряжена: ${s.charge}%. Скоро всё отключится!"
+                        s.onBattery && !p.onBattery -> "Пропало питание — ИБП «${d.title}» работает от батареи: ${s.charge}%, осталось ~${fmtRuntime(s.runtimeSec)}"
+                        !s.onBattery && p.onBattery -> "Питание восстановлено — ИБП «${d.title}» снова от сети, заряд ${s.charge}%"
+                        s.overload && !p.overload -> "Перегрузка ИБП «${d.title}»: нагрузка ${s.load}%"
+                        s.replaceBattery && !p.replaceBattery -> "ИБП «${d.title}» просит заменить батарею"
+                        else -> null
+                    }
+                    if (msg != null) upsAlert(d.title, msg)
+                }
+                prev[d.id] = s
+            }
+            delay(30_000)
+        }
+    }
+
+    private fun upsAlert(title: String, text: String) {
+        val now = System.currentTimeMillis()
+        app.store.addEvent(Event(cameraId = "ups", cameraName = title, time = now, kind = text))
+        val open = PendingIntent.getActivity(
+            this, 7, Intent(this, MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        val n = NotificationCompat.Builder(this, CamApp.CH_ALARM)
+            .setSmallIcon(R.drawable.ic_stat)
+            .setContentTitle("ИБП: $title")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        try {
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(("ups$title").hashCode(), n)
+        } catch (_: SecurityException) {
+        }
+        val s = app.store.settings.value
+        if (s.tgToken.isNotBlank() && s.tgChat.isNotBlank()) scope.launch { Telegram.send(s.tgToken, s.tgChat, "🔋 $text", null) }
+        if (s.mailReady) scope.launch { Mail.send(s.mailConfig(), "NordCam: ИБП — $title", text, null) }
     }
 
     private fun notifyAlarm(c: Camera, ev: Event, jpeg: ByteArray?) {
