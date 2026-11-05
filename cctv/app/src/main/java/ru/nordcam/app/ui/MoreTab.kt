@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import ru.nordcam.app.net.Mail
 import ru.nordcam.app.net.MailPresets
+import ru.nordcam.app.net.MailSecurity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -169,52 +170,7 @@ fun MoreTab(nav: Nav) {
                 }) { Text("Сохранить и проверить") }
             }
         }
-        Section("Уведомления на почту") {
-            Text(
-                "Тревоги со снимком приходят письмом. Почта работает даже там, где Telegram блокируют.",
-                color = C.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            )
-            var mHost by remember { mutableStateOf(s.mailHost) }
-            var mPort by remember { mutableStateOf(s.mailPort.toString()) }
-            var mUser by remember { mutableStateOf(s.mailUser) }
-            var mPass by remember { mutableStateOf(s.mailPass) }
-            var mTo by remember { mutableStateOf(s.mailTo) }
-            var mBusy by remember { mutableStateOf(false) }
-            var mHint by remember { mutableStateOf(MailPresets.all.firstOrNull { it.host == s.mailHost }?.hint.orEmpty()) }
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                MailPresets.all.forEach { pr ->
-                    FilterChip(mHost == pr.host, {
-                        mHost = pr.host; mPort = pr.port.toString(); mHint = pr.hint
-                    }, { Text(pr.title) })
-                }
-            }
-            if (mHint.isNotBlank()) Text(mHint, color = C.amber, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-            Row {
-                Field(mHost, { mHost = it.trim() }, "SMTP-сервер", Modifier.weight(2f), hint = "smtp.yandex.ru")
-                Field(mPort, { mPort = it.filter(Char::isDigit).take(5) }, "Порт", Modifier.weight(1f), number = true)
-            }
-            Field(mUser, { mUser = it.trim() }, "Ящик-отправитель", hint = "camera@yandex.ru")
-            Field(mPass, { mPass = it.trim() }, "Пароль приложения", password = true)
-            Field(mTo, { mTo = it.trim() }, "Кому присылать", hint = "можно несколько через запятую")
-            Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(enabled = !mBusy, onClick = {
-                    val port = mPort.toIntOrNull() ?: 465
-                    store.updateSettings { it.copy(mailHost = mHost, mailPort = port, mailUser = mUser, mailPass = mPass, mailTo = mTo) }
-                    mBusy = true
-                    scope.launch {
-                        val err = withContext(Dispatchers.IO) {
-                            Mail.send(mHost, port, mUser, mPass, mTo, "NordCam: проверка уведомлений", "Почта подключена — сюда будут приходить тревоги со снимками.", null)
-                        }
-                        mBusy = false
-                        toast(ctx, err ?: "Сохранено, проверочное письмо отправлено")
-                    }
-                }) { Text(if (mBusy) "Отправляю…" else "Сохранить и проверить") }
-                if (s.mailReady) TextButton(onClick = {
-                    store.updateSettings { it.copy(mailPass = "", mailTo = "") }
-                    mPass = ""; mTo = ""
-                }) { Text("Отключить", color = C.red) }
-            }
-        }
+        Section("Уведомления на почту") { MailSettings() }
         Section("Защита приложения") {
             SwitchRow("PIN-код при входе", if (s.pin.isBlank()) "Выключен" else "Включён", s.pin.isNotBlank()) { on ->
                 if (on) pinDialog = true else store.updateSettings { it.copy(pin = "", biometric = false) }
@@ -324,5 +280,103 @@ private fun ThemeCard(id: String, title: String, p: Palette, selected: Boolean, 
             Box(Modifier.fillMaxWidth().height(12.dp).background(p.surface, RoundedCornerShape(3.dp)))
         }
         Text(title, fontSize = 12.sp, color = if (selected) C.accent2 else C.muted, modifier = Modifier.padding(top = 4.dp))
+    }
+}
+
+/** Настройки почты: готовые сервисы или свой почтовый сервер. */
+@Composable
+private fun MailSettings() {
+    val ctx = LocalContext.current
+    val store = ctx.app.store
+    val scope = rememberCoroutineScope()
+    val s = store.settings.value
+    val presetOf = { h: String -> MailPresets.all.firstOrNull { it.host == h } }
+    var own by remember { mutableStateOf(s.mailHost.isNotBlank() && presetOf(s.mailHost) == null) }
+    var mHost by remember { mutableStateOf(s.mailHost) }
+    var mPort by remember { mutableStateOf(s.mailPort.toString()) }
+    var mSec by remember { mutableStateOf(MailSecurity.of(s.mailSecurity, s.mailPort)) }
+    var mUser by remember { mutableStateOf(s.mailUser) }
+    var mPass by remember { mutableStateOf(s.mailPass) }
+    var mFrom by remember { mutableStateOf(s.mailFrom) }
+    var mTo by remember { mutableStateOf(s.mailTo) }
+    var mTrust by remember { mutableStateOf(s.mailTrust) }
+    var mBusy by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf("") }
+    var ok by remember { mutableStateOf(false) }
+    val preset = if (own) null else presetOf(mHost)
+
+    Text(
+        "Тревоги со снимком приходят письмом. Почта работает даже там, где Telegram блокируют.",
+        color = C.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+    )
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        MailPresets.all.forEach { pr ->
+            FilterChip(!own && mHost == pr.host, {
+                own = false; mHost = pr.host; mPort = pr.port.toString(); mSec = MailSecurity.SSL; mTrust = false; mFrom = ""
+            }, { Text(pr.title) })
+        }
+        FilterChip(own, {
+            if (!own) { own = true; if (presetOf(mHost) != null) mHost = "" }
+        }, { Text("Свой сервер") })
+    }
+    if (preset != null) Text(preset.hint, color = C.amber, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+
+    if (own) {
+        Text(
+            "Свой почтовый сервер (Postfix, Exim, Mailcow, iRedMail, Exchange или почта на хостинге). Адрес и порт SMTP — в настройках сервера или у хостинга.",
+            color = C.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+        Row {
+            Field(mHost, { mHost = it.trim() }, "SMTP-сервер", Modifier.weight(2f), hint = "mail.вашдомен.ru")
+            Field(mPort, { mPort = it.filter(Char::isDigit).take(5) }, "Порт", Modifier.weight(1f), number = true)
+        }
+        Text("Шифрование", color = C.muted, fontSize = 12.sp, modifier = Modifier.padding(start = 16.dp, top = 6.dp))
+        Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            MailSecurity.entries.forEach { sec ->
+                FilterChip(mSec == sec, {
+                    // Порт меняем сам, только если он был стандартным
+                    if (mPort.isBlank() || mPort.toIntOrNull()?.let { p -> MailSecurity.entries.any { it.port == p } } == true) mPort = sec.port.toString()
+                    mSec = sec
+                }, { Text("${sec.title} · ${sec.port}") })
+            }
+        }
+        if (mSec == MailSecurity.NONE) {
+            Text("Без шифрования пароль идёт открытым текстом — годится только внутри своей сети или VPN.", color = C.amber, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        }
+        Field(mUser, { mUser = it.trim() }, "Логин", hint = "обычно полный адрес ящика; пусто — без входа")
+        Field(mPass, { mPass = it }, "Пароль", password = true)
+        Field(mFrom, { mFrom = it.trim() }, "Адрес отправителя", hint = "если отличается от логина")
+        if (mSec != MailSecurity.NONE) {
+            SwitchRow("Доверять сертификату сервера", "Для своего сервера с самоподписанным сертификатом", mTrust) { mTrust = it }
+        }
+    } else {
+        Field(mUser, { mUser = it.trim() }, "Ящик-отправитель", hint = "camera@yandex.ru")
+        Field(mPass, { mPass = it.trim() }, "Пароль приложения", password = true)
+    }
+    Field(mTo, { mTo = it.trim() }, "Кому присылать", hint = "можно несколько через запятую")
+    if (result.isNotBlank()) Text(result, color = if (ok) C.green else C.red, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+    Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(enabled = !mBusy && mHost.isNotBlank(), onClick = {
+            val port = mPort.toIntOrNull() ?: mSec.port
+            store.updateSettings {
+                it.copy(
+                    mailHost = mHost, mailPort = port, mailSecurity = mSec.name, mailUser = mUser, mailPass = mPass,
+                    mailFrom = if (own) mFrom else "", mailTo = mTo, mailTrust = own && mTrust,
+                )
+            }
+            mBusy = true; result = ""
+            scope.launch {
+                val err = withContext(Dispatchers.IO) {
+                    Mail.send(store.settings.value.mailConfig(), "NordCam: проверка уведомлений", "Почта подключена — сюда будут приходить тревоги со снимками.", null)
+                }
+                mBusy = false
+                ok = err == null
+                result = err ?: "Сохранено, проверочное письмо отправлено — проверьте ящик (и папку «Спам»)."
+            }
+        }) { Text(if (mBusy) "Отправляю…" else "Сохранить и проверить") }
+        if (s.mailReady) TextButton(onClick = {
+            store.updateSettings { it.copy(mailHost = "", mailPass = "", mailTo = "") }
+            mHost = ""; mPass = ""; mTo = ""; result = ""
+        }) { Text("Отключить", color = C.red) }
     }
 }

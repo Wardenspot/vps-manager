@@ -246,7 +246,7 @@ class MonitorService : Service() {
         if (s.mailReady) {
             scope.launch {
                 Mail.send(
-                    s.mailHost, s.mailPort, s.mailUser, s.mailPass, s.mailTo,
+                    s.mailConfig(),
                     "NordCam: $kind — $where",
                     "$kind\nКамера: $where\nВремя: $t\n\n" + if (jpeg != null) "Снимок во вложении." else "Снимок получить не удалось.",
                     jpeg,

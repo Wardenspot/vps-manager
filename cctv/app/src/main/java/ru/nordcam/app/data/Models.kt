@@ -154,12 +154,20 @@ data class Settings(
     val mailUser: String = "",
     val mailPass: String = "",
     val mailTo: String = "",
+    val mailSecurity: String = "",
+    val mailFrom: String = "",
+    val mailTrust: Boolean = false,
     /** Оформление: system, dark, light, amoled, ocean, forest. */
     val theme: String = "dark",
     /** Цвет акцента: blue, cyan, green, orange, purple, red, pink. */
     val accent: String = "blue",
 ) {
-    val mailReady: Boolean get() = mailHost.isNotBlank() && mailUser.isNotBlank() && mailPass.isNotBlank() && mailTo.isNotBlank()
+    val mailReady: Boolean get() = mailHost.isNotBlank() && mailTo.isNotBlank() && (mailUser.isNotBlank() || mailFrom.isNotBlank())
+
+    fun mailConfig() = ru.nordcam.app.net.MailConfig(
+        mailHost, mailPort, ru.nordcam.app.net.MailSecurity.of(mailSecurity, mailPort),
+        mailUser, mailPass, mailFrom, mailTo, mailTrust,
+    )
 
     fun toJson(): JSONObject = JSONObject()
         .put("gridSize", gridSize).put("monitoring", monitoring).put("clipSeconds", clipSeconds)
@@ -168,7 +176,8 @@ data class Settings(
         .put("pin", pin).put("biometric", biometric).put("autoRelockSec", autoRelockSec)
         .put("lastGroup", lastGroup)
         .put("mailHost", mailHost).put("mailPort", mailPort).put("mailUser", mailUser)
-        .put("mailPass", mailPass).put("mailTo", mailTo).put("theme", theme).put("accent", accent)
+        .put("mailPass", mailPass).put("mailTo", mailTo)
+        .put("mailSecurity", mailSecurity).put("mailFrom", mailFrom).put("mailTrust", mailTrust).put("theme", theme).put("accent", accent)
 
     companion object {
         fun from(o: JSONObject?) = if (o == null) Settings() else Settings(
@@ -189,6 +198,9 @@ data class Settings(
             mailUser = o.optString("mailUser"),
             mailPass = o.optString("mailPass"),
             mailTo = o.optString("mailTo"),
+            mailSecurity = o.optString("mailSecurity"),
+            mailFrom = o.optString("mailFrom"),
+            mailTrust = o.optBoolean("mailTrust", false),
             theme = o.optString("theme", "dark"),
             accent = o.optString("accent", "blue"),
         )
