@@ -370,6 +370,7 @@ fun CameraForm(nav: Nav, initial: Camera, isNew: Boolean) {
     var c by remember(initial.id) { mutableStateOf(initial) }
     var advanced by remember { mutableStateOf(initial.mainUrl.isNotBlank() && initial.vendor != Vendors.ONVIF.id) }
     var preview by remember { mutableStateOf(false) }
+    var unlinked by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
     val v = Vendors.of(c.vendor)
@@ -468,6 +469,20 @@ fun CameraForm(nav: Nav, initial: Camera, isNew: Boolean) {
                 }
             }
         }
+        if (!shared) {
+            val srv = store.servers.value.firstOrNull { it.id == c.serverId }
+            Section("Архив на сервере записи") {
+                Text(
+                    if (srv != null && c.serverCam.isNotBlank()) "Связана с «${c.serverCamName.ifBlank { c.serverCam }}» на ${srv.title}"
+                    else "Не связана. Если архив пишет Synology Surveillance Station или Frigate — подключите сервер, и записи появятся в «Архиве».",
+                    color = C.muted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { nav.go(if (srv != null) Screen.EditServer(srv.id) else Screen.Servers) }) { Text(if (srv != null) "Сервер" else "Серверы записи") }
+                    if (srv != null) TextButton(onClick = { unlinked = true; c = c.copy(serverId = "", serverCam = "", serverCamName = "") }) { Text("Отвязать", color = C.muted) }
+                }
+            }
+        }
         if (!isNew || !shared) AlarmSection(c) { c = it }
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
@@ -476,7 +491,10 @@ fun CameraForm(nav: Nav, initial: Camera, isNew: Boolean) {
                     val host = if (c.host.isBlank() && c.mainUrl.isNotBlank()) {
                         try { java.net.URI(c.mainUrl).host.orEmpty() } catch (e: Exception) { "" }
                     } else c.host
-                    store.upsert(c.copy(host = host))
+                    // Связь с сервером записи могла поменяться на экране сервера — берём актуальную
+                    val cur = store.camera(c.id)
+                    val link = if (cur != null && !unlinked) c.copy(serverId = cur.serverId, serverCam = cur.serverCam, serverCamName = cur.serverCamName) else c
+                    store.upsert(link.copy(host = host))
                     if (c.motion != MotionMode.OFF || c.record == RecordMode.CONTINUOUS) {
                         if (!store.settings.value.monitoring) toast(ctx, "Сохранено. Включите «Наблюдение в фоне» в разделе «Ещё»")
                         else toast(ctx, "Сохранено")

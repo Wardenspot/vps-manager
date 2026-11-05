@@ -35,6 +35,34 @@ class Store(private val ctx: Context) {
     private val _settings = MutableStateFlow(Settings.from(prefs.getString("settings", null)?.let { JSONObject(it) }))
     val settings: StateFlow<Settings> = _settings
 
+    private val _servers = MutableStateFlow(
+        try { JSONArray(prefs.getString("servers", "[]")).mapObjects { ArchiveServer.from(it) } } catch (e: Exception) { emptyList() },
+    )
+    val servers: StateFlow<List<ArchiveServer>> = _servers
+
+    fun server(id: String) = _servers.value.firstOrNull { it.id == id }
+
+    @Synchronized
+    fun upsertServer(s: ArchiveServer) {
+        val list = _servers.value.filterNot { it.id == s.id } + s
+        val arr = JSONArray()
+        list.forEach { arr.put(it.toJson()) }
+        prefs.edit().putString("servers", arr.toString()).apply()
+        _servers.value = list
+    }
+
+    @Synchronized
+    fun deleteServer(id: String) {
+        val list = _servers.value.filterNot { it.id == id }
+        val arr = JSONArray()
+        list.forEach { arr.put(it.toJson()) }
+        prefs.edit().putString("servers", arr.toString()).apply()
+        _servers.value = list
+        // Отвязываем камеры от удалённого сервера
+        val cams = _cameras.value
+        if (cams.any { it.serverId == id }) saveCameras(cams.map { if (it.serverId == id) it.copy(serverId = "", serverCam = "", serverCamName = "") else it })
+    }
+
     private val eventsFile = File(ctx.filesDir, "events.json")
     private val _events = MutableStateFlow(loadEvents())
     val events: StateFlow<List<Event>> = _events

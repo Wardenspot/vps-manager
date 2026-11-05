@@ -103,7 +103,7 @@ fun ArchiveTab(nav: Nav) {
             items(list, key = { it.id }) { c ->
                 val local = remember(c.id) { ctx.app.store.cameraRecDir(c.id).listFiles()?.count { it.isFile } ?: 0 }
                 Row(
-                    Modifier.fillMaxWidth().clickable { nav.go(Screen.Playback(c.id, tab = if (Vendors.hasPlayback(c)) 0 else 1)) }
+                    Modifier.fillMaxWidth().clickable { nav.go(Screen.Playback(c.id, tab = if (Vendors.hasPlayback(c) || c.serverCam.isNotBlank()) 0 else 1)) }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -114,6 +114,7 @@ fun ArchiveTab(nav: Nav) {
                         Text(
                             listOfNotNull(
                                 c.group.ifBlank { null },
+                                if (c.serverCam.isNotBlank()) "архив на сервере" else null,
                                 if (Vendors.hasPlayback(c)) "архив на камере" else null,
                                 if (local > 0) "на телефоне: $local" else null,
                             ).joinToString(" · ").ifBlank { "записей нет" },
@@ -136,14 +137,26 @@ fun PlaybackScreen(nav: Nav, camId: String, at: Long, tabIn: Int) {
     if (cam == null) {
         LaunchedEffect(Unit) { nav.back() }; return
     }
-    var tab by remember { mutableIntStateOf(if (at > 0) 0 else tabIn) }
+    val servers by ctx.app.store.servers.collectAsState()
+    val server = servers.firstOrNull { it.id == cam.serverId }?.takeIf { cam.serverCam.isNotBlank() }
+    // Вкладки: сервер записи (если камера к нему привязана), сама камера/регистратор, телефон
+    val tabs = listOfNotNull(
+        server?.let { "server" to it.title.substringBefore(" Surveillance").ifBlank { "Сервер" } },
+        if (server == null || Vendors.hasPlayback(cam)) "camera" to "На камере" else null,
+        "phone" to "На телефоне",
+    )
+    var tab by remember { mutableIntStateOf(if (tabIn == 1 && at == 0L) tabs.lastIndex else 0) }
+    if (tab > tabs.lastIndex) tab = 0
     Column(Modifier.fillMaxSize()) {
         Bar("Архив: ${cam.title}", onBack = { nav.back() })
         TabRow(selectedTabIndex = tab, containerColor = C.bg) {
-            Tab(tab == 0, { tab = 0 }, text = { Text("На камере") })
-            Tab(tab == 1, { tab = 1 }, text = { Text("На телефоне") })
+            tabs.forEachIndexed { i, (_, title) -> Tab(tab == i, { tab = i }, text = { Text(title, maxLines = 1) }) }
         }
-        if (tab == 0) RemoteArchive(nav, cam, at) else LocalArchive(nav, cam)
+        when (tabs[tab].first) {
+            "server" -> ServerArchive(nav, cam, server!!, at)
+            "camera" -> RemoteArchive(nav, cam, at)
+            else -> LocalArchive(nav, cam)
+        }
     }
 }
 

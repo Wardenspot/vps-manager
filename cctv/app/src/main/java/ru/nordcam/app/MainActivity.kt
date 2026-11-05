@@ -24,6 +24,8 @@ import ru.nordcam.app.share.ShareCodec
 import ru.nordcam.app.ui.C
 import ru.nordcam.app.ui.Centered
 import ru.nordcam.app.ui.EditCameraScreen
+import ru.nordcam.app.ui.EditServerScreen
+import ru.nordcam.app.ui.ServersScreen
 import ru.nordcam.app.ui.FullscreenScreen
 import ru.nordcam.app.ui.HomeScreen
 import ru.nordcam.app.ui.ImportScreen
@@ -41,6 +43,8 @@ sealed interface Screen {
     data class EditCamera(val camId: String?) : Screen
     data object Share : Screen
     data class Import(val code: String = "") : Screen
+    data object Servers : Screen
+    data class EditServer(val id: String?) : Screen
 }
 
 class Nav {
@@ -138,5 +142,7 @@ private fun Root(nav: Nav) {
         is Screen.EditCamera -> Centered { EditCameraScreen(nav, s.camId) }
         Screen.Share -> Centered { ShareScreen(nav) }
         is Screen.Import -> Centered { ImportScreen(nav, s.code) }
+        Screen.Servers -> Centered { ServersScreen(nav) }
+        is Screen.EditServer -> Centered { EditServerScreen(nav, s.id) }
     }
 }

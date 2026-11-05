@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.FilterChip
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -145,6 +146,9 @@ fun MoreTab(nav: Nav) {
                 "Занято: ${fmtSize(used)}. Когда место закончится, самые старые записи удаляются автоматически.",
                 color = C.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )
+        }
+        Section("Архив на серверах") {
+            NavRow(Icons.Default.Storage, "Серверы записи", "Synology Surveillance Station, Frigate — архив по шкале времени") { nav.go(Screen.Servers) }
         }
         Section("Доступ для других") {
             NavRow(Icons.Default.QrCode2, "Поделиться камерами", "Код или QR с правами и сроком доступа") { nav.go(Screen.Share) }

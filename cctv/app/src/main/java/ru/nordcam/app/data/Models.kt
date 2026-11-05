@@ -85,6 +85,11 @@ data class Camera(
     val shared: Boolean = false,
     val perms: Perms = Perms.FULL,
     val order: Int = 0,
+    /** Сервер записи (Synology, Frigate), откуда брать архив этой камеры. */
+    val serverId: String = "",
+    /** Камера на сервере записи: id у Synology, имя у Frigate. */
+    val serverCam: String = "",
+    val serverCamName: String = "",
 ) {
     val title: String get() = name.ifBlank { "$host ${if (channel > 1) "к$channel" else ""}".trim() }
 
@@ -98,6 +103,7 @@ data class Camera(
         .put("ptz", ptz).put("audio", audio).put("tcp", tcp).put("motion", motion.name)
         .put("sensitivity", sensitivity).put("record", record.name).put("notify", notify)
         .put("shared", shared).put("perms", perms.toJson()).put("order", order)
+        .put("serverId", serverId).put("serverCam", serverCam).put("serverCamName", serverCamName)
 
     companion object {
         fun from(o: JSONObject) = Camera(
@@ -128,6 +134,9 @@ data class Camera(
             shared = o.optBoolean("shared", false),
             perms = Perms.from(o.optJSONObject("perms")),
             order = o.optInt("order", 0),
+            serverId = o.optString("serverId"),
+            serverCam = o.optString("serverCam"),
+            serverCamName = o.optString("serverCamName"),
         )
     }
 }
