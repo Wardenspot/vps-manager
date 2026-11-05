@@ -96,6 +96,7 @@ fun LiveTab(nav: Nav) {
                     Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Добавить камеру")
                 }
             }
+            UpsBar { nav.go(Screen.Ups) }
             return@Column
         }
         val pager = rememberPagerState(pageCount = { pages })
@@ -134,6 +135,7 @@ fun LiveTab(nav: Nav) {
                 }
             }
         }
+        UpsBar { nav.go(Screen.Ups) }
     }
 }
 

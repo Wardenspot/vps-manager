@@ -26,6 +26,7 @@ import ru.nordcam.app.ui.Centered
 import ru.nordcam.app.ui.EditCameraScreen
 import ru.nordcam.app.ui.EditServerScreen
 import ru.nordcam.app.ui.ServersScreen
+import ru.nordcam.app.ui.UpsScreen
 import ru.nordcam.app.ui.FullscreenScreen
 import ru.nordcam.app.ui.HomeScreen
 import ru.nordcam.app.ui.ImportScreen
@@ -45,6 +46,7 @@ sealed interface Screen {
     data class Import(val code: String = "") : Screen
     data object Servers : Screen
     data class EditServer(val id: String?) : Screen
+    data object Ups : Screen
 }
 
 class Nav {
@@ -144,5 +146,6 @@ private fun Root(nav: Nav) {
         is Screen.Import -> Centered { ImportScreen(nav, s.code) }
         Screen.Servers -> Centered { ServersScreen(nav) }
         is Screen.EditServer -> Centered { EditServerScreen(nav, s.id) }
+        Screen.Ups -> Centered { UpsScreen(nav) }
     }
 }
