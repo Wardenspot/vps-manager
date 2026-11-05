@@ -98,7 +98,7 @@ fun EventsTab(nav: Nav) {
         if (!settings.monitoring) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).background(C.surface, RoundedCornerShape(12.dp))
-                    .clickable { nav.home(4) }.padding(12.dp),
+                    .clickable { nav.home("more") }.padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Default.NotificationsOff, null, tint = C.amber)

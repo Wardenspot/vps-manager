@@ -209,7 +209,7 @@ fun ImportScreen(nav: Nav, initialCode: String) {
             Button(onClick = {
                 ctx.app.store.upsertAll(res.cams)
                 toast(ctx, "Добавлено камер: ${res.cams.size}")
-                nav.home(0)
+                nav.home("live")
             }, modifier = Modifier.padding(16.dp)) { Text("Добавить ${res.cams.size}") }
             return@Column
         }

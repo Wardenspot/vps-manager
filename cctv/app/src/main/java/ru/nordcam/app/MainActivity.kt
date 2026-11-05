@@ -27,6 +27,8 @@ import ru.nordcam.app.ui.EditCameraScreen
 import ru.nordcam.app.ui.EditServerScreen
 import ru.nordcam.app.ui.ServersScreen
 import ru.nordcam.app.ui.UpsScreen
+import ru.nordcam.app.ui.HomeSetupScreen
+import ru.nordcam.app.ui.HaWebScreen
 import ru.nordcam.app.ui.FullscreenScreen
 import ru.nordcam.app.ui.HomeScreen
 import ru.nordcam.app.ui.ImportScreen
@@ -47,17 +49,20 @@ sealed interface Screen {
     data object Servers : Screen
     data class EditServer(val id: String?) : Screen
     data object Ups : Screen
+    data object HomeSetup : Screen
+    data object HaWeb : Screen
 }
 
 class Nav {
     val stack = mutableStateListOf<Screen>(Screen.Home)
-    val tab = mutableStateOf(0)
+    /** Вкладка главного экрана: live, home, archive, events, cameras, more. */
+    val tab = mutableStateOf("live")
     val top: Screen get() = stack.last()
     fun go(s: Screen) { stack.add(s) }
     fun back() { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
-    fun home(tabIndex: Int? = null) {
+    fun home(tabKey: String? = null) {
         while (stack.size > 1) stack.removeAt(stack.lastIndex)
-        if (tabIndex != null) tab.value = tabIndex
+        if (tabKey != null) tab.value = tabKey
     }
 }
 
@@ -123,7 +128,7 @@ class MainActivity : FragmentActivity() {
             return
         }
         if (i.getStringExtra(EXTRA_EVENT) != null) {
-            nav.home(2)
+            nav.home("events")
         }
     }
 
@@ -147,5 +152,7 @@ private fun Root(nav: Nav) {
         Screen.Servers -> Centered { ServersScreen(nav) }
         is Screen.EditServer -> Centered { EditServerScreen(nav, s.id) }
         Screen.Ups -> Centered { UpsScreen(nav) }
+        Screen.HomeSetup -> Centered { HomeSetupScreen(nav) }
+        Screen.HaWeb -> HaWebScreen(nav)
     }
 }

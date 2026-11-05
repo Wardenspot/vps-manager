@@ -38,6 +38,8 @@ import ru.nordcam.app.net.Mail
 import ru.nordcam.app.net.Ups
 import ru.nordcam.app.net.UpsStatus
 import ru.nordcam.app.ui.fmtRuntime
+import ru.nordcam.app.ui.itemName
+import ru.nordcam.app.ui.stateText
 import ru.nordcam.app.net.Telegram
 import java.io.File
 import java.text.SimpleDateFormat
@@ -76,6 +78,7 @@ class MonitorService : Service() {
         if (watcher == null) {
             watcher = scope.launch {
                 launch { upsLoop() }
+                launch { homeLoop() }
                 while (isActive) {
                     reconcile()
                     delay(3000)
@@ -296,7 +299,43 @@ class MonitorService : Service() {
         }
     }
 
-    private fun upsAlert(title: String, text: String) {
+    // ------------------------------------------------------------------ умный дом
+
+    /** Датчики Home Assistant с флагом «тревога»: протечка, дым, газ, открытие, срабатывание охраны. */
+    private suspend fun homeLoop() {
+        val prev = HashMap<String, String>()
+        while (alive()) {
+            val watch = app.store.home.value.filter { it.kind == "ha" && it.alert }
+            val ha = app.store.ha()
+            if (watch.isNotEmpty() && ha != null) {
+                try {
+                    val states = ha.states().associateBy { it.id }
+                    app.store.haStates.value = states
+                    watch.forEach { item ->
+                        val e = states[item.entityId] ?: return@forEach
+                        val before = prev[item.entityId]
+                        prev[item.entityId] = e.state
+                        if (before == null || before == e.state) return@forEach
+                        val triggered = when (e.domain) {
+                            "binary_sensor" -> e.state == "on"
+                            "alarm_control_panel" -> e.state == "triggered"
+                            "lock" -> e.state == "jammed" || e.state == "unlocked"
+                            "cover" -> e.state == "open" || e.state == "opening"
+                            else -> e.state != "unavailable" && e.state != "unknown"
+                        }
+                        if (triggered) {
+                            val name = itemName(item, e)
+                            upsAlert(name, "$name: ${stateText(e)}", "🏠", "Дом")
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            delay(10_000)
+        }
+    }
+
+    private fun upsAlert(title: String, text: String, emoji: String = "🔋", prefix: String = "ИБП") {
         val now = System.currentTimeMillis()
         app.store.addEvent(Event(cameraId = "ups", cameraName = title, time = now, kind = text))
         val open = PendingIntent.getActivity(
@@ -305,7 +344,7 @@ class MonitorService : Service() {
         )
         val n = NotificationCompat.Builder(this, CamApp.CH_ALARM)
             .setSmallIcon(R.drawable.ic_stat)
-            .setContentTitle("ИБП: $title")
+            .setContentTitle("$prefix: $title")
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(open)
@@ -313,12 +352,12 @@ class MonitorService : Service() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
         try {
-            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(("ups$title").hashCode(), n)
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(("$prefix$title").hashCode(), n)
         } catch (_: SecurityException) {
         }
         val s = app.store.settings.value
-        if (s.tgToken.isNotBlank() && s.tgChat.isNotBlank()) scope.launch { Telegram.send(s.tgToken, s.tgChat, "🔋 $text", null) }
-        if (s.mailReady) scope.launch { Mail.send(s.mailConfig(), "NordCam: ИБП — $title", text, null) }
+        if (s.tgToken.isNotBlank() && s.tgChat.isNotBlank()) scope.launch { Telegram.send(s.tgToken, s.tgChat, "$emoji $text", null) }
+        if (s.mailReady) scope.launch { Mail.send(s.mailConfig(), "NordCam: $prefix — $title", text, null) }
     }
 
     private fun notifyAlarm(c: Camera, ev: Event, jpeg: ByteArray?) {

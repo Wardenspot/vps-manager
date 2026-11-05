@@ -80,6 +80,29 @@ class Store(private val ctx: Context) {
         _ups.value = list
     }
 
+    // ---- умный дом ----
+    private val _home = MutableStateFlow(
+        try { JSONArray(prefs.getString("home", "[]")).mapObjects { HomeItem.from(it) }.sortedBy { it.order } } catch (e: Exception) { emptyList() },
+    )
+    val home: StateFlow<List<HomeItem>> = _home
+
+    /** Последние состояния устройств Home Assistant (entity_id → состояние) и комнаты. */
+    val haStates = MutableStateFlow<Map<String, ru.nordcam.app.net.HaEntity>>(emptyMap())
+    val haAreas = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    @Synchronized
+    fun saveHome(list: List<HomeItem>) {
+        val arr = JSONArray()
+        list.forEachIndexed { i, it -> arr.put(it.copy(order = i).toJson()) }
+        prefs.edit().putString("home", arr.toString()).apply()
+        _home.value = list.mapIndexed { i, it -> it.copy(order = i) }
+    }
+
+    fun ha(): ru.nordcam.app.net.HomeAssistant? {
+        val s = _settings.value
+        return if (s.haReady) ru.nordcam.app.net.HomeAssistant(s.haUrl, s.haToken, s.haTrust) else null
+    }
+
     private val eventsFile = File(ctx.filesDir, "events.json")
     private val _events = MutableStateFlow(loadEvents())
     val events: StateFlow<List<Event>> = _events

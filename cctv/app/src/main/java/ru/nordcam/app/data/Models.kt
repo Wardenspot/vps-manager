@@ -170,7 +170,13 @@ data class Settings(
     val theme: String = "dark",
     /** Цвет акцента: blue, cyan, green, orange, purple, red, pink. */
     val accent: String = "blue",
+    /** Home Assistant для вкладки «Дом». */
+    val haUrl: String = "",
+    val haToken: String = "",
+    val haTrust: Boolean = false,
 ) {
+    val haReady: Boolean get() = haUrl.isNotBlank() && haToken.isNotBlank()
+
     val mailReady: Boolean get() = mailHost.isNotBlank() && mailTo.isNotBlank() && (mailUser.isNotBlank() || mailFrom.isNotBlank())
 
     fun mailConfig() = ru.nordcam.app.net.MailConfig(
@@ -186,7 +192,7 @@ data class Settings(
         .put("lastGroup", lastGroup)
         .put("mailHost", mailHost).put("mailPort", mailPort).put("mailUser", mailUser)
         .put("mailPass", mailPass).put("mailTo", mailTo)
-        .put("mailSecurity", mailSecurity).put("mailFrom", mailFrom).put("mailTrust", mailTrust).put("theme", theme).put("accent", accent)
+        .put("mailSecurity", mailSecurity).put("mailFrom", mailFrom).put("mailTrust", mailTrust).put("haUrl", haUrl).put("haToken", haToken).put("haTrust", haTrust).put("theme", theme).put("accent", accent)
 
     companion object {
         fun from(o: JSONObject?) = if (o == null) Settings() else Settings(
@@ -212,6 +218,9 @@ data class Settings(
             mailTrust = o.optBoolean("mailTrust", false),
             theme = o.optString("theme", "dark"),
             accent = o.optString("accent", "blue"),
+            haUrl = o.optString("haUrl"),
+            haToken = o.optString("haToken"),
+            haTrust = o.optBoolean("haTrust", false),
         )
     }
 }

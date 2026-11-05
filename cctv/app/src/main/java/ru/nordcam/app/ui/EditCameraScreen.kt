@@ -256,7 +256,7 @@ private fun OnvifConnectDialog(nav: Nav, host: String, port: Int, title: String,
         ctx.app.store.upsertAll(cams)
         toast(ctx, "Добавлено камер: ${cams.size}")
         onClose()
-        nav.home(0)
+        nav.home("live")
     }
 
     AlertDialog(
@@ -332,7 +332,7 @@ private fun NvrPane(nav: Nav) {
                     val base = c.name.ifBlank { c.host }
                     ctx.app.store.upsertAll((1..n).map { ch -> c.copy(id = java.util.UUID.randomUUID().toString(), name = "$base — канал $ch", channel = ch) })
                     toast(ctx, "Добавлено каналов: $n")
-                    nav.home(0)
+                    nav.home("live")
                 },
             ) { Text("Добавить каналы") }
             OutlinedButton(enabled = c.host.isNotBlank(), onClick = { onvifDialog = true }) { Text("Найти по ONVIF") }
@@ -499,7 +499,7 @@ fun CameraForm(nav: Nav, initial: Camera, isNew: Boolean) {
                         if (!store.settings.value.monitoring) toast(ctx, "Сохранено. Включите «Наблюдение в фоне» в разделе «Ещё»")
                         else toast(ctx, "Сохранено")
                     } else toast(ctx, "Сохранено")
-                    if (isNew) nav.home(0) else nav.back()
+                    if (isNew) nav.home("live") else nav.back()
                 },
             ) { Text(if (isNew) "Добавить" else "Сохранить") }
         }

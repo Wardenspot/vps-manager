@@ -235,6 +235,7 @@ fun FullscreenScreen(nav: Nav, camIdIn: String) {
 
     @Composable
     fun Details() {
+        if (!cam.shared) CameraHomeActions(cam.id)
         if (cam.ptz && cam.perms.ptz) {
             Section("Поворот и зум (PTZ)") { PtzPad(cam, compact = false) }
         } else if (!cam.shared) {
@@ -309,6 +310,7 @@ fun FullscreenScreen(nav: Nav, camIdIn: String) {
                 }
                 ControlsRow(false)
                 if (cam.ptz && cam.perms.ptz) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { PtzPad(cam, compact = false) }
+                if (!cam.shared) CameraHomeActions(cam.id)
             }
         }
         return
