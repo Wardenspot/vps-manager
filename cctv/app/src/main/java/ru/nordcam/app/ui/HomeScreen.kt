@@ -1,6 +1,13 @@
 package ru.nordcam.app.ui
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GridView
@@ -30,27 +37,62 @@ fun HomeScreen(nav: Nav) {
     val events by ctx.app.store.events.collectAsState()
     val unseen = events.count { !it.seen }
     var tab by nav.tab
-    Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f)) {
-            when (tab) {
-                0 -> LiveTab(nav)
-                1 -> ArchiveTab(nav)
-                2 -> EventsTab(nav)
-                3 -> DevicesTab(nav)
-                else -> MoreTab(nav)
-            }
+    val screen = rememberWinSize()
+    val items = listOf(
+        Triple(Icons.Default.GridView, "Просмотр", 0),
+        Triple(Icons.Default.History, "Архив", 0),
+        Triple(Icons.Default.Notifications, "События", unseen),
+        Triple(Icons.Default.Videocam, "Камеры", 0),
+        Triple(Icons.Default.Menu, "Ещё", 0),
+    )
+
+    @Composable
+    fun TabIcon(i: Int) {
+        val (icon, _, badge) = items[i]
+        if (badge > 0) BadgedBox(badge = { Badge { Text(if (badge > 99) "99+" else "$badge") } }) { Icon(icon, null) }
+        else Icon(icon, null)
+    }
+
+    @Composable
+    fun Content() {
+        when (tab) {
+            0 -> LiveTab(nav)
+            1 -> Centered { ArchiveTab(nav) }
+            2 -> Centered { EventsTab(nav) }
+            3 -> Centered { DevicesTab(nav) }
+            else -> Centered { MoreTab(nav) }
         }
+    }
+
+    if (screen.wide || (screen.short && screen.landscape)) {
+        // Развёрнутый складной, планшет или телефон боком: меню слева, экран не теряет высоту
+        Row(Modifier.fillMaxSize()) {
+            NavigationRail(containerColor = C.surface) {
+                val colors = NavigationRailItemDefaults.colors(indicatorColor = C.surface2, selectedIconColor = C.accent2, selectedTextColor = C.accent2)
+                Spacer(Modifier.weight(1f))
+                items.forEachIndexed { i, (_, label, _) ->
+                    NavigationRailItem(
+                        selected = tab == i, onClick = { tab = i }, icon = { TabIcon(i) },
+                        label = if (screen.short) null else ({ Text(label) }), colors = colors,
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+            }
+            Box(Modifier.weight(1f).fillMaxHeight()) { Content() }
+        }
+        return
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f)) { Content() }
         NavigationBar(containerColor = C.surface) {
             val colors = NavigationBarItemDefaults.colors(indicatorColor = C.surface2, selectedIconColor = C.accent2, selectedTextColor = C.accent2)
-            NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Default.GridView, null) }, label = { Text("Просмотр") }, colors = colors)
-            NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.Default.History, null) }, label = { Text("Архив") }, colors = colors)
-            NavigationBarItem(tab == 2, { tab = 2 }, {
-                BadgedBox(badge = { if (unseen > 0) Badge { Text(if (unseen > 99) "99+" else "$unseen") } }) {
-                    Icon(Icons.Default.Notifications, null)
-                }
-            }, label = { Text("События") }, colors = colors)
-            NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Icons.Default.Videocam, null) }, label = { Text("Камеры") }, colors = colors)
-            NavigationBarItem(tab == 4, { tab = 4 }, { Icon(Icons.Default.Menu, null) }, label = { Text("Ещё") }, colors = colors)
+            items.forEachIndexed { i, (_, label, _) ->
+                NavigationBarItem(
+                    selected = tab == i, onClick = { tab = i }, icon = { TabIcon(i) },
+                    label = { Text(label, maxLines = 1) }, alwaysShowLabel = !screen.tiny, colors = colors,
+                )
+            }
         }
     }
 }

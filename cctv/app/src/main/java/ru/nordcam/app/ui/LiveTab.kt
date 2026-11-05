@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -63,12 +65,12 @@ fun LiveTab(nav: Nav) {
     if (group.isNotBlank() && group !in groups) group = ""
     val list = cams.filter { group.isBlank() || it.group == group }
     val size = settings.gridSize.coerceIn(1, 16)
-    val cols = sqrt(size.toDouble()).toInt().coerceAtLeast(1)
+    val screen = rememberWinSize()
     val pages = max(1, (list.size + size - 1) / size)
 
     Column(Modifier.fillMaxSize()) {
         Bar("Просмотр") {
-            listOf(1, 4, 9, 16).forEach { n ->
+            (if (screen.wide) listOf(1, 4, 6, 9, 12, 16) else listOf(1, 4, 9, 16)).forEach { n ->
                 TextButton(onClick = { store.updateSettings { it.copy(gridSize = n) } }) {
                     Text("$n", color = if (n == size) C.accent2 else C.muted, fontWeight = if (n == size) FontWeight.Bold else FontWeight.Normal)
                 }
@@ -97,16 +99,27 @@ fun LiveTab(nav: Nav) {
             return@Column
         }
         val pager = rememberPagerState(pageCount = { pages })
-        HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth(), key = { "$size-$group-$it" }) { page ->
-            val slice = list.drop(page * size).take(size)
-            Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                for (r in 0 until cols) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        for (c in 0 until cols) {
-                            val cam = slice.getOrNull(r * cols + c)
-                            Box(Modifier.weight(1f).aspectRatio(16f / 9f).clip(RoundedCornerShape(if (cols >= 4) 4.dp else 8.dp))) {
-                                if (cam != null) Tile(cam, hd = size == 1, recKind = rec[cam.id], small = cols >= 4) { nav.go(Screen.Live(cam.id)) }
-                                else Box(Modifier.fillMaxSize().background(C.surface))
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp)) {
+            val gap = 4.dp
+            val (cols, rows) = bestGrid(size, maxWidth.value, maxHeight.value, gap.value)
+            val tileW = minOf((maxWidth - gap * (cols - 1)) / cols, (maxHeight - gap * (rows - 1)) / rows * (16f / 9f))
+            val tileH = tileW * (9f / 16f)
+            val small = tileW < 170.dp
+            HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), key = { "$size-$group-$it" }) { page ->
+                val slice = list.drop(page * size).take(size)
+                Box(Modifier.fillMaxSize(), contentAlignment = if (screen.wide || screen.short) Alignment.Center else Alignment.TopCenter) {
+                    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                        for (r in 0 until rows) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                                for (c in 0 until cols) {
+                                    val idx = r * cols + c
+                                    if (idx >= size) break
+                                    val cam = slice.getOrNull(idx)
+                                    Box(Modifier.size(tileW, tileH).clip(RoundedCornerShape(if (small) 4.dp else 8.dp))) {
+                                        if (cam != null) Tile(cam, hd = size == 1, recKind = rec[cam.id], small = small) { nav.go(Screen.Live(cam.id)) }
+                                        else Box(Modifier.fillMaxSize().background(C.surface))
+                                    }
+                                }
                             }
                         }
                     }
@@ -114,18 +127,13 @@ fun LiveTab(nav: Nav) {
             }
         }
         if (pages > 1) {
-            Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.Center) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.Center) {
                 repeat(pages) { i ->
                     Dot(if (i == pager.currentPage) C.accent2 else C.line, 7)
                     if (i < pages - 1) Spacer(Modifier.width(6.dp))
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Нажмите на камеру — полный экран, запись, поворот и архив. Листайте вбок для следующих камер.",
-            color = C.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp),
-        )
     }
 }
 

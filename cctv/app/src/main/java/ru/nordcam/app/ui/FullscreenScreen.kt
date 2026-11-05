@@ -3,7 +3,10 @@ package ru.nordcam.app.ui
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -100,8 +103,23 @@ fun FullscreenScreen(nav: Nav, camIdIn: String) {
         return
     }
     val scope = rememberCoroutineScope()
-    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val activity = ctx as? Activity
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val screen = rememberWinSize()
+    var immersive by remember { mutableStateOf(false) }
+    val overlay = immersive || (landscape && screen.short)
+
+    /** На телефоне — поворот экрана, на большом экране — видео на весь экран без поворота. */
+    fun toggleFull() {
+        if (immersive) { immersive = false; return }
+        if (landscape && screen.short) {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        } else if (screen.wide || screen.posture != Posture.NORMAL) {
+            immersive = true
+        } else {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+    }
     DisposableEffect(Unit) { onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED } }
 
     var hd by remember(camId) { mutableStateOf(true) }
@@ -210,14 +228,57 @@ fun FullscreenScreen(nav: Nav, camIdIn: String) {
             Ctl(Icons.Default.CameraAlt, "Снимок", tint) { snapshot() }
             Ctl(if (recKind != null) Icons.Default.Stop else Icons.Default.FiberManualRecord, "Запись", if (recKind != null) C.red else tint) { toggleRecord() }
             Ctl(Icons.Default.AspectRatio, "Вписать/заполнить", if (fill) C.accent2 else tint) { fill = !fill }
-            if (landscape && cam.ptz && cam.perms.ptz) Ctl(Icons.Default.OpenWith, "Поворот", if (showPtz) C.accent2 else tint) { showPtz = !showPtz }
-            Ctl(if (landscape) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, "Во весь экран", tint) {
-                activity?.requestedOrientation = if (landscape) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            }
+            if (overlay && cam.ptz && cam.perms.ptz) Ctl(Icons.Default.OpenWith, "Поворот", if (showPtz) C.accent2 else tint) { showPtz = !showPtz }
+            Ctl(if (overlay) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, "Во весь экран", tint) { toggleFull() }
         }
     }
 
-    if (landscape) {
+    @Composable
+    fun Details() {
+        if (cam.ptz && cam.perms.ptz) {
+            Section("Поворот и зум (PTZ)") { PtzPad(cam, compact = false) }
+        } else if (!cam.shared) {
+            Text(
+                "Поворот камеры (PTZ) выключен. Если камера поворотная — включите его в настройках камеры.",
+                color = C.muted, fontSize = 13.sp, modifier = Modifier.padding(16.dp),
+            )
+        }
+        Section("Камера") {
+            Text(
+                buildString {
+                    append(Vendors.of(cam.vendor).title)
+                    if (cam.group.isNotBlank()) append(" · ${cam.group}")
+                    if (!cam.shared) append("\n${cam.host}, канал ${cam.channel}")
+                    if (cam.shared && cam.perms.until > 0) {
+                        append("\nДоступ до ${java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale("ru")).format(java.util.Date(cam.perms.until))}")
+                    }
+                },
+                color = C.muted, fontSize = 13.sp, modifier = Modifier.padding(16.dp),
+            )
+            Text(
+                "Щипок — цифровой зум, двойное касание — приблизить/сбросить. HD — основной поток, SD — лёгкий для мобильного интернета.",
+                color = C.muted, fontSize = 12.sp, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            )
+        }
+    }
+
+    @Composable
+    fun TopBar() {
+        Bar(cam.title, onBack = { nav.back() }) {
+            if (cams.size > 1) {
+                IconButton(onClick = { camId = cams[(idx - 1 + cams.size) % cams.size].id }) { Icon(Icons.Default.ChevronLeft, "Предыдущая") }
+                IconButton(onClick = { camId = cams[(idx + 1) % cams.size].id }) { Icon(Icons.Default.ChevronRight, "Следующая") }
+            }
+            if (cam.perms.archive) IconButton(onClick = { nav.go(Screen.Playback(cam.id)) }) { Icon(Icons.Default.History, "Архив") }
+            if (!cam.shared) IconButton(onClick = { nav.go(Screen.EditCamera(cam.id)) }) { Icon(Icons.Default.Edit, "Настройки") }
+        }
+    }
+
+    BackHandler(enabled = immersive) { immersive = false }
+    LaunchedEffect(overlay) { if (!overlay) controls = true }
+
+    // 1) Во весь экран: телефон боком или кнопка «во весь экран» на большом экране
+    if (overlay) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             Video(Modifier.fillMaxSize())
             if (controls) {
@@ -225,9 +286,7 @@ fun FullscreenScreen(nav: Nav, camIdIn: String) {
                     Modifier.align(Alignment.TopStart).fillMaxWidth().background(Color(0x77000000)).padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = {
-                        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                    }) { Icon(Icons.Default.FullscreenExit, "Выход", tint = Color.White) }
+                    IconButton(onClick = { toggleFull() }) { Icon(Icons.Default.FullscreenExit, "Выход", tint = Color.White) }
                     Text(cam.title, color = Color.White, modifier = Modifier.weight(1f))
                 }
                 Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0x77000000))) { ControlsRow(true) }
@@ -239,46 +298,45 @@ fun FullscreenScreen(nav: Nav, camIdIn: String) {
         return
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Bar(cam.title, onBack = { nav.back() }) {
-            if (cams.size > 1) {
-                IconButton(onClick = { camId = cams[(idx - 1 + cams.size) % cams.size].id }) { Icon(Icons.Default.ChevronLeft, "Предыдущая") }
-                IconButton(onClick = { camId = cams[(idx + 1) % cams.size].id }) { Icon(Icons.Default.ChevronRight, "Следующая") }
+    // 2) Полусложен «ноутбуком»: видео на верхней половине, управление на нижней
+    if (screen.posture == Posture.TABLETOP) {
+        Column(Modifier.fillMaxSize()) {
+            Video(Modifier.weight(1f).fillMaxWidth())
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp)) {
+                    IconButton(onClick = { nav.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
+                    Text(cam.title, modifier = Modifier.weight(1f))
+                }
+                ControlsRow(false)
+                if (cam.ptz && cam.perms.ptz) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { PtzPad(cam, compact = false) }
             }
-            if (cam.perms.archive) IconButton(onClick = { nav.go(Screen.Playback(cam.id)) }) { Icon(Icons.Default.History, "Архив") }
-            if (!cam.shared) IconButton(onClick = { nav.go(Screen.EditCamera(cam.id)) }) { Icon(Icons.Default.Edit, "Настройки") }
         }
+        return
+    }
+
+    // 3) Развёрнутый складной / планшет / «книжка»: видео слева, управление справа
+    if (screen.wide || screen.posture == Posture.BOOK) {
+        val leftWeight = if (screen.posture == Posture.BOOK) 0.5f else 0.64f
+        Column(Modifier.fillMaxSize()) {
+            TopBar()
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                Column(Modifier.weight(leftWeight).fillMaxHeight()) {
+                    Video(Modifier.weight(1f).fillMaxWidth())
+                    ControlsRow(false)
+                }
+                Column(Modifier.weight(1f - leftWeight).fillMaxHeight().verticalScroll(rememberScrollState())) { Details() }
+            }
+        }
+        return
+    }
+
+    // 4) Обычный телефон
+    Column(Modifier.fillMaxSize()) {
+        TopBar()
         Video(Modifier.fillMaxWidth().aspectRatio(16f / 9f))
         ControlsRow(false)
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            if (cam.ptz && cam.perms.ptz) {
-                Section("Поворот и зум (PTZ)") { PtzPad(cam, compact = false) }
-            } else if (!cam.shared) {
-                Text(
-                    "Поворот камеры (PTZ) выключен. Если камера поворотная — включите его в настройках камеры.",
-                    color = C.muted, fontSize = 13.sp, modifier = Modifier.padding(16.dp),
-                )
-            }
-            Section("Камера") {
-                Text(
-                    buildString {
-                        append(Vendors.of(cam.vendor).title)
-                        if (cam.group.isNotBlank()) append(" · ${cam.group}")
-                        if (!cam.shared) append("\n${cam.host}, канал ${cam.channel}")
-                        if (cam.shared && cam.perms.until > 0) {
-                            append("\nДоступ до ${java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale("ru")).format(java.util.Date(cam.perms.until))}")
-                        }
-                    },
-                    color = C.muted, fontSize = 13.sp, modifier = Modifier.padding(16.dp),
-                )
-                Text(
-                    "Щипок — цифровой зум, двойное касание — приблизить/сбросить. HD — основной поток, SD — лёгкий для мобильного интернета.",
-                    color = C.muted, fontSize = 12.sp, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                )
-            }
-        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { Details() }
     }
-    LaunchedEffect(landscape) { if (!landscape) controls = true }
 }
 
 @Composable

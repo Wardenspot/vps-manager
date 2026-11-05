@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -175,11 +176,12 @@ private fun RemoteArchive(nav: Nav, cam: Camera, at: Long) {
         minute = ((t - day) / 60_000).toFloat()
     }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+    @Composable
+    fun Player(videoMod: Modifier) {
         if (start > 0) {
             val url = Vendors.playbackUrl(cam, Date(start), Date(start + 6 * 3600_000L))
             CamVideo(
-                cam, Modifier.fillMaxWidth().aspectRatio(16f / 9f), sub = false, audio = cam.audio, muted = muted,
+                cam, videoMod, sub = false, audio = cam.audio, muted = muted,
                 url = url, autoReconnect = false, onPlayer = { player = it },
             )
             val t by (player?.time ?: zero).collectAsState()
@@ -195,10 +197,14 @@ private fun RemoteArchive(nav: Nav, cam: Camera, at: Long) {
             }
         } else {
             Column(
-                Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(C.surface),
+                videoMod.background(C.surface),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
             ) { Text("Выберите день и время", color = C.muted) }
         }
+    }
+
+    @Composable
+    fun Picker() {
         Section("Когда смотреть") {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { day = dayStart(day - 12 * 3600_000L) }) { Icon(Icons.Default.ChevronLeft, "Предыдущий день") }
@@ -225,6 +231,22 @@ private fun RemoteArchive(nav: Nav, cam: Camera, at: Long) {
             "Записи читаются с карты памяти камеры или диска регистратора. Если видео не идёт — проверьте, что запись на камере включена и время на ней верное.",
             color = C.muted, fontSize = 12.sp, modifier = Modifier.padding(16.dp),
         )
+    }
+
+    val screen = rememberWinSize()
+    when {
+        screen.posture == Posture.TABLETOP -> Column(Modifier.fillMaxSize()) {
+            Column(Modifier.weight(1f)) { Player(Modifier.weight(1f).fillMaxWidth()) }
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { Picker() }
+        }
+        screen.wide || screen.posture == Posture.BOOK || (screen.landscape && screen.short) -> Row(Modifier.fillMaxSize()) {
+            Column(Modifier.weight(0.62f).fillMaxHeight()) { Player(Modifier.weight(1f).fillMaxWidth()) }
+            Column(Modifier.weight(0.38f).fillMaxHeight().verticalScroll(rememberScrollState())) { Picker() }
+        }
+        else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            Player(Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+            Picker()
+        }
     }
 
     if (pickDate) {
@@ -333,8 +355,10 @@ fun LocalPlayerScreen(nav: Nav, path: String, camId: String) {
         if (!f.exists()) {
             Empty("Файл не найден", "Возможно, запись удалена из-за лимита места."); return@Column
         }
+        val screen = rememberWinSize()
+        val big = screen.wide || screen.landscape || screen.posture != Posture.NORMAL
         CamVideo(
-            cam, Modifier.fillMaxWidth().aspectRatio(16f / 9f), audio = true, muted = muted, fill = fill,
+            cam, if (big) Modifier.fillMaxWidth().weight(1f) else Modifier.fillMaxWidth().aspectRatio(16f / 9f), audio = true, muted = muted, fill = fill,
             url = Uri.fromFile(f).toString(), autoReconnect = false, onPlayer = { player = it },
         )
         val p = player

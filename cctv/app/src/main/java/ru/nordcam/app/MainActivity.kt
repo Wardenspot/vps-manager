@@ -22,6 +22,7 @@ import androidx.fragment.app.FragmentActivity
 import ru.nordcam.app.service.MonitorService
 import ru.nordcam.app.share.ShareCodec
 import ru.nordcam.app.ui.C
+import ru.nordcam.app.ui.Centered
 import ru.nordcam.app.ui.EditCameraScreen
 import ru.nordcam.app.ui.FullscreenScreen
 import ru.nordcam.app.ui.HomeScreen
@@ -134,8 +135,8 @@ private fun Root(nav: Nav) {
         is Screen.Live -> FullscreenScreen(nav, s.camId)
         is Screen.Playback -> PlaybackScreen(nav, s.camId, s.at, s.tab)
         is Screen.LocalPlay -> LocalPlayerScreen(nav, s.path, s.camId)
-        is Screen.EditCamera -> EditCameraScreen(nav, s.camId)
-        Screen.Share -> ShareScreen(nav)
-        is Screen.Import -> ImportScreen(nav, s.code)
+        is Screen.EditCamera -> Centered { EditCameraScreen(nav, s.camId) }
+        Screen.Share -> Centered { ShareScreen(nav) }
+        is Screen.Import -> Centered { ImportScreen(nav, s.code) }
     }
 }
