@@ -11,6 +11,21 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.FilterChip
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import ru.nordcam.app.net.Mail
+import ru.nordcam.app.net.MailPresets
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -102,6 +117,7 @@ fun MoreTab(nav: Nav) {
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Bar("Ещё")
+        Section("Оформление") { ThemePicker(s.theme, s.accent) { t, a -> store.updateSettings { it.copy(theme = t, accent = a) } } }
         Section("Наблюдение") {
             SwitchRow(
                 "Наблюдение в фоне",
@@ -151,6 +167,52 @@ fun MoreTab(nav: Nav) {
                         toast(ctx, if (ok) "Сохранено, проверочное сообщение отправлено" else "Сохранено, но отправить не удалось — проверьте токен, chat id и интернет")
                     }
                 }) { Text("Сохранить и проверить") }
+            }
+        }
+        Section("Уведомления на почту") {
+            Text(
+                "Тревоги со снимком приходят письмом. Почта работает даже там, где Telegram блокируют.",
+                color = C.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            )
+            var mHost by remember { mutableStateOf(s.mailHost) }
+            var mPort by remember { mutableStateOf(s.mailPort.toString()) }
+            var mUser by remember { mutableStateOf(s.mailUser) }
+            var mPass by remember { mutableStateOf(s.mailPass) }
+            var mTo by remember { mutableStateOf(s.mailTo) }
+            var mBusy by remember { mutableStateOf(false) }
+            var mHint by remember { mutableStateOf(MailPresets.all.firstOrNull { it.host == s.mailHost }?.hint.orEmpty()) }
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                MailPresets.all.forEach { pr ->
+                    FilterChip(mHost == pr.host, {
+                        mHost = pr.host; mPort = pr.port.toString(); mHint = pr.hint
+                    }, { Text(pr.title) })
+                }
+            }
+            if (mHint.isNotBlank()) Text(mHint, color = C.amber, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            Row {
+                Field(mHost, { mHost = it.trim() }, "SMTP-сервер", Modifier.weight(2f), hint = "smtp.yandex.ru")
+                Field(mPort, { mPort = it.filter(Char::isDigit).take(5) }, "Порт", Modifier.weight(1f), number = true)
+            }
+            Field(mUser, { mUser = it.trim() }, "Ящик-отправитель", hint = "camera@yandex.ru")
+            Field(mPass, { mPass = it.trim() }, "Пароль приложения", password = true)
+            Field(mTo, { mTo = it.trim() }, "Кому присылать", hint = "можно несколько через запятую")
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(enabled = !mBusy, onClick = {
+                    val port = mPort.toIntOrNull() ?: 465
+                    store.updateSettings { it.copy(mailHost = mHost, mailPort = port, mailUser = mUser, mailPass = mPass, mailTo = mTo) }
+                    mBusy = true
+                    scope.launch {
+                        val err = withContext(Dispatchers.IO) {
+                            Mail.send(mHost, port, mUser, mPass, mTo, "NordCam: проверка уведомлений", "Почта подключена — сюда будут приходить тревоги со снимками.", null)
+                        }
+                        mBusy = false
+                        toast(ctx, err ?: "Сохранено, проверочное письмо отправлено")
+                    }
+                }) { Text(if (mBusy) "Отправляю…" else "Сохранить и проверить") }
+                if (s.mailReady) TextButton(onClick = {
+                    store.updateSettings { it.copy(mailPass = "", mailTo = "") }
+                    mPass = ""; mTo = ""
+                }) { Text("Отключить", color = C.red) }
             }
         }
         Section("Защита приложения") {
@@ -217,4 +279,50 @@ private fun Num(label: String, value: Int, onSave: (Int) -> Unit) {
         t = v.filter(Char::isDigit).take(6)
         t.toIntOrNull()?.let(onSave)
     }, label, number = true)
+}
+
+@Composable
+private fun ThemePicker(theme: String, accent: String, onPick: (String, String) -> Unit) {
+    Column(Modifier.padding(vertical = 8.dp)) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ThemeCard("system", "Как в системе", if (isSystemInDarkTheme()) Themes.DARK else Themes.LIGHT, theme == "system") { onPick("system", accent) }
+            Themes.all.forEach { p -> ThemeCard(p.id, p.title, p, theme == p.id) { onPick(p.id, accent) } }
+        }
+        Text("Цвет акцента", color = C.muted, fontSize = 13.sp, modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 8.dp))
+        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Themes.accents.forEach { (id, main, _) ->
+                Box(
+                    Modifier.size(34.dp).clip(CircleShape).background(main)
+                        .border(if (id == accent) 3.dp else 0.dp, if (id == accent) C.text else Color.Transparent, CircleShape)
+                        .clickable { onPick(theme, id) },
+                    contentAlignment = Alignment.Center,
+                ) { if (id == accent) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeCard(id: String, title: String, p: Palette, selected: Boolean, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick)) {
+        Column(
+            Modifier.size(width = 76.dp, height = 104.dp).clip(RoundedCornerShape(12.dp)).background(p.bg)
+                .border(if (selected) 2.dp else 1.dp, if (selected) C.accent else C.line, RoundedCornerShape(12.dp))
+                .padding(7.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            // Мини-превью: сетка камер и нижнее меню
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Box(Modifier.weight(1f).height(22.dp).background(p.surface2, RoundedCornerShape(3.dp)))
+                Box(Modifier.weight(1f).height(22.dp).background(p.surface2, RoundedCornerShape(3.dp)))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Box(Modifier.weight(1f).height(22.dp).background(p.surface2, RoundedCornerShape(3.dp)))
+                Box(Modifier.weight(1f).height(22.dp).background(C.accent, RoundedCornerShape(3.dp)))
+            }
+            Spacer(Modifier.weight(1f))
+            Box(Modifier.fillMaxWidth().height(12.dp).background(p.surface, RoundedCornerShape(3.dp)))
+        }
+        Text(title, fontSize = 12.sp, color = if (selected) C.accent2 else C.muted, modifier = Modifier.padding(top = 4.dp))
+    }
 }

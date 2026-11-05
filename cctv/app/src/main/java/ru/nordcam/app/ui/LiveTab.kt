@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -98,12 +99,12 @@ fun LiveTab(nav: Nav) {
         val pager = rememberPagerState(pageCount = { pages })
         HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth(), key = { "$size-$group-$it" }) { page ->
             val slice = list.drop(page * size).take(size)
-            Column(Modifier.fillMaxWidth().padding(horizontal = 2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 for (r in 0 until cols) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         for (c in 0 until cols) {
                             val cam = slice.getOrNull(r * cols + c)
-                            Box(Modifier.weight(1f).aspectRatio(16f / 9f)) {
+                            Box(Modifier.weight(1f).aspectRatio(16f / 9f).clip(RoundedCornerShape(if (cols >= 4) 4.dp else 8.dp))) {
                                 if (cam != null) Tile(cam, hd = size == 1, recKind = rec[cam.id], small = cols >= 4) { nav.go(Screen.Live(cam.id)) }
                                 else Box(Modifier.fillMaxSize().background(C.surface))
                             }

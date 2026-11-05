@@ -3,7 +3,12 @@ package ru.nordcam.app
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.BackHandler
+import android.graphics.Color
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -60,7 +65,15 @@ class MainActivity : FragmentActivity() {
         handle(intent)
         MonitorService.sync(this)
         setContent {
-            NordCamTheme {
+            val settings by app.store.settings.collectAsState()
+            NordCamTheme(settings.theme, settings.accent) {
+                val dark = C.palette.dark
+                LaunchedEffect(dark) {
+                    enableEdgeToEdge(
+                        statusBarStyle = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+                        navigationBarStyle = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+                    )
+                }
                 Surface(Modifier.fillMaxSize(), color = C.bg) {
                     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                         if (locked.value) LockScreen(this@MainActivity) { locked.value = false }

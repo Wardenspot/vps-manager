@@ -34,6 +34,7 @@ import ru.nordcam.app.data.Event
 import ru.nordcam.app.data.MotionMode
 import ru.nordcam.app.data.RecordMode
 import ru.nordcam.app.net.Http
+import ru.nordcam.app.net.Mail
 import ru.nordcam.app.net.Telegram
 import java.io.File
 import java.text.SimpleDateFormat
@@ -236,9 +237,21 @@ class MonitorService : Service() {
         app.store.addEvent(ev)
         if (c.notify) notifyAlarm(c, ev, jpeg)
         val s = app.store.settings.value
+        val t = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale("ru")).format(Date(now))
+        val where = c.title + if (c.group.isNotBlank()) " (${c.group})" else ""
+        // Отправка идёт отдельно, чтобы не задерживать приём следующих событий с камеры
         if (s.tgToken.isNotBlank() && s.tgChat.isNotBlank()) {
-            val t = SimpleDateFormat("dd.MM HH:mm:ss", Locale("ru")).format(Date(now))
-            Telegram.send(s.tgToken, s.tgChat, "🚨 $kind — ${c.title}${if (c.group.isNotBlank()) " (${c.group})" else ""}\n$t", jpeg)
+            scope.launch { Telegram.send(s.tgToken, s.tgChat, "🚨 $kind — $where\n$t", jpeg) }
+        }
+        if (s.mailReady) {
+            scope.launch {
+                Mail.send(
+                    s.mailHost, s.mailPort, s.mailUser, s.mailPass, s.mailTo,
+                    "NordCam: $kind — $where",
+                    "$kind\nКамера: $where\nВремя: $t\n\n" + if (jpeg != null) "Снимок во вложении." else "Снимок получить не удалось.",
+                    jpeg,
+                )
+            }
         }
     }
 

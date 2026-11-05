@@ -149,13 +149,26 @@ data class Settings(
     val biometric: Boolean = false,
     val autoRelockSec: Int = 60,
     val lastGroup: String = "",
+    val mailHost: String = "",
+    val mailPort: Int = 465,
+    val mailUser: String = "",
+    val mailPass: String = "",
+    val mailTo: String = "",
+    /** Оформление: system, dark, light, amoled, ocean, forest. */
+    val theme: String = "dark",
+    /** Цвет акцента: blue, cyan, green, orange, purple, red, pink. */
+    val accent: String = "blue",
 ) {
+    val mailReady: Boolean get() = mailHost.isNotBlank() && mailUser.isNotBlank() && mailPass.isNotBlank() && mailTo.isNotBlank()
+
     fun toJson(): JSONObject = JSONObject()
         .put("gridSize", gridSize).put("monitoring", monitoring).put("clipSeconds", clipSeconds)
         .put("segmentMinutes", segmentMinutes).put("storageMb", storageMb)
         .put("cooldownSec", cooldownSec).put("tgToken", tgToken).put("tgChat", tgChat)
         .put("pin", pin).put("biometric", biometric).put("autoRelockSec", autoRelockSec)
         .put("lastGroup", lastGroup)
+        .put("mailHost", mailHost).put("mailPort", mailPort).put("mailUser", mailUser)
+        .put("mailPass", mailPass).put("mailTo", mailTo).put("theme", theme).put("accent", accent)
 
     companion object {
         fun from(o: JSONObject?) = if (o == null) Settings() else Settings(
@@ -171,6 +184,13 @@ data class Settings(
             biometric = o.optBoolean("biometric", false),
             autoRelockSec = o.optInt("autoRelockSec", 60),
             lastGroup = o.optString("lastGroup"),
+            mailHost = o.optString("mailHost"),
+            mailPort = o.optInt("mailPort", 465),
+            mailUser = o.optString("mailUser"),
+            mailPass = o.optString("mailPass"),
+            mailTo = o.optString("mailTo"),
+            theme = o.optString("theme", "dark"),
+            accent = o.optString("accent", "blue"),
         )
     }
 }
