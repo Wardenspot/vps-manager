@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Камера наблюдения: корпус, объектив и кронштейн -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#2F80ED"
+        android:pathData="M30,40 L70,32 Q74,31 75,35 L78,49 Q79,53 75,54 L35,62 Q31,63 30,59 Z" />
+    <path
+        android:fillColor="#0E1116"
+        android:pathData="M64,46 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
+    <path
+        android:fillColor="#56CCF2"
+        android:pathData="M64,46 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
+    <path
+        android:fillColor="#2F80ED"
+        android:pathData="M44,60 L50,59 L52,70 L62,70 L62,76 L46,76 Z" />
+    <path
+        android:fillColor="#EB5757"
+        android:pathData="M38,45 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" />
+</vector>

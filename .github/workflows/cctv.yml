@@ -1,0 +1,78 @@
+name: Сборка NordCam (видеонаблюдение)
+
+on:
+  push:
+    branches: [cctv-app]
+    paths: ["cctv/**", ".github/workflows/cctv.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: cctv
+    env:
+      NC_VERSION_CODE: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Ключ подписи (тот же, что у NordKey, если задан)
+        id: key
+        env:
+          KS_B64: ${{ secrets.NK_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/nordcam.jks"
+            echo "NC_KEYSTORE_FILE=$RUNNER_TEMP/nordcam.jks" >> "$GITHUB_ENV"
+            echo "signed=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Секрет NK_KEYSTORE_B64 не задан — собираю тестовую (debug) версию"
+            echo "signed=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Сборка
+        env:
+          NC_KEYSTORE_PASSWORD: ${{ secrets.NK_KEYSTORE_PASSWORD }}
+        run: |
+          set -o pipefail
+          if [ "${{ steps.key.outputs.signed }}" = "1" ]; then TASK=assembleRelease; OUT=release/app-release.apk
+          else TASK=assembleDebug; OUT=debug/app-debug.apk; fi
+          if ! gradle --no-daemon :app:$TASK 2>&1 | tee build.log; then
+            # Ошибки компиляции — в аннотации, чтобы их было видно на странице сборки
+            grep -E "^e: |error:|What went wrong|Could not (find|resolve)" build.log | head -40 | while IFS= read -r l; do
+              echo "::error::${l//$'\n'/ }"
+            done
+            exit 1
+          fi
+          cp app/build/outputs/apk/$OUT NordCam.apk
+          ls -la NordCam.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NordCam-${{ github.run_number }}
+          path: cctv/NordCam.apk
+
+      - name: Выпуск (отдельный тег, не трогает NordKey)
+        if: steps.key.outputs.signed == '1'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nordcam-v1.0.${{ github.run_number }}
+          name: NordCam 1.0.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          files: cctv/NordCam.apk
