@@ -8,7 +8,7 @@ val versionCodeEnv = (System.getenv("NC_VERSION_CODE") ?: "1").toInt()
 
 android {
     namespace = "ru.nordcam.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "ru.nordcam.app"
