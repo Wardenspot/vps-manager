@@ -49,7 +49,7 @@ android {
         aidl = true
     }
     packaging {
-        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        resources.excludes += listOf("/META-INF/{AL2.0,LGPL2.1}", "META-INF/versions/9/OSGI-INF/MANIFEST.MF", "META-INF/versions/**/module-info.class", "META-INF/*.kotlin_module")
         jniLibs.useLegacyPackaging = true
     }
 }
