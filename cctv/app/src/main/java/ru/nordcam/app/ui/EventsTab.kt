@@ -21,7 +21,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material3.AlertDialog
@@ -139,9 +141,17 @@ fun EventsTab(nav: Nav) {
                         }.padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        val img = thumb(e.snapshot, 240)
-                        Box(Modifier.width(112.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).background(C.surface2)) {
-                            if (img != null) Image(img, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        val sys = e.cameraId == "ups" || e.cameraId == "home"
+                        if (sys) {
+                            // События ИБП и умного дома — без снимка, только значок
+                            Box(Modifier.size(40.dp).background(C.surface2, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+                                Icon(if (e.cameraId == "ups") Icons.Default.BatteryAlert else Icons.Default.Home, null, tint = C.amber)
+                            }
+                        } else {
+                            val img = thumb(e.snapshot, 240)
+                            Box(Modifier.width(112.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).background(C.surface2)) {
+                                if (img != null) Image(img, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                            }
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
@@ -164,12 +174,13 @@ fun EventsTab(nav: Nav) {
         val cam = cams.firstOrNull { it.id == e.cameraId }
         AlertDialog(
             onDismissRequest = { open = null },
-            title = { Text("${e.kind} · ${e.cameraName}") },
+            title = { Text(if (e.cameraId == "ups" || e.cameraId == "home") e.cameraName else "${e.kind} · ${e.cameraName}") },
             text = {
                 Column {
                     Text(SimpleDateFormat("d MMMM yyyy, HH:mm:ss", Locale("ru")).format(Date(e.time)), color = C.muted)
                     Spacer(Modifier.height(10.dp))
                     if (img != null) Image(img, null, Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.FillWidth)
+                    else if (e.cameraId == "ups" || e.cameraId == "home") Text(e.kind)
                     else Text("Снимок не получен", color = C.muted)
                     Spacer(Modifier.height(10.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

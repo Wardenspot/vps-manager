@@ -337,7 +337,7 @@ class MonitorService : Service() {
 
     private fun upsAlert(title: String, text: String, emoji: String = "🔋", prefix: String = "ИБП") {
         val now = System.currentTimeMillis()
-        app.store.addEvent(Event(cameraId = "ups", cameraName = title, time = now, kind = text))
+        app.store.addEvent(Event(cameraId = if (prefix == "Дом") "home" else "ups", cameraName = title, time = now, kind = text))
         val open = PendingIntent.getActivity(
             this, 7, Intent(this, MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE,

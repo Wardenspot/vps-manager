@@ -98,7 +98,17 @@ class CamPlayer(private val ctx: Context) {
     private val _length = MutableStateFlow(0L)
     val length: StateFlow<Long> = _length
     private var layout: VLCVideoLayout? = null
-    var released = false; private set
+    @Volatile var released = false; private set
+
+    /**
+     * Остановка и смена потока в libVLC блокируют поток, пока камера не ответит (до десятков секунд,
+     * если камера недоступна). Поэтому всё тяжёлое делается в отдельном потоке — экран не зависает.
+     */
+    private val worker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "nordcam-player").apply { isDaemon = true } }
+
+    private fun bg(f: () -> Unit) {
+        try { worker.execute { try { f() } catch (_: Throwable) {} } } catch (_: java.util.concurrent.RejectedExecutionException) {}
+    }
 
     init {
         player.setEventListener { e ->
@@ -132,13 +142,16 @@ class CamPlayer(private val ctx: Context) {
     fun play(media: Media) {
         if (released) { media.release(); return }
         _state.value = PlayState.CONNECTING
-        player.setMedia(media)
-        media.release()
-        player.play()
+        bg {
+            if (released) { media.release(); return@bg }
+            player.setMedia(media)
+            media.release()
+            player.play()
+        }
     }
 
     fun stop() {
-        if (!released) player.stop()
+        bg { if (!released) player.stop() }
     }
 
     fun setVolume(v: Int) {
@@ -152,11 +165,14 @@ class CamPlayer(private val ctx: Context) {
         released = true
         try {
             player.setEventListener(null)
-            player.stop()
             player.detachViews()
-            player.release()
         } catch (_: Exception) {
         }
         layout = null
+        bg {
+            player.stop()
+            player.release()
+        }
+        worker.shutdown()
     }
 }

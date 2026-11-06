@@ -106,7 +106,7 @@ fun DevicesTab(nav: Nav) {
             onDismissRequest = { del = null },
             title = { Text("Удалить «${c.title}»?") },
             text = { Text("Камера пропадёт из приложения. Записи на телефоне останутся в папке приложения до очистки.") },
-            confirmButton = { TextButton(onClick = { store.delete(c.id); ctx.app.recorder.stop(c.id); del = null }) { Text("Удалить", color = C.red) } },
+            confirmButton = { TextButton(onClick = { store.delete(c.id); val rec = ctx.app.recorder; kotlin.concurrent.thread { rec.stop(c.id) }; del = null }) { Text("Удалить", color = C.red) } },
             dismissButton = { TextButton(onClick = { del = null }) { Text("Отмена") } },
         )
     }
