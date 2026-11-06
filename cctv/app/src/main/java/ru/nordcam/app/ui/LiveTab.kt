@@ -70,6 +70,7 @@ fun LiveTab(nav: Nav) {
 
     Column(Modifier.fillMaxSize()) {
         Bar("Просмотр") {
+            VpnIndicator(nav)
             (if (screen.wide) listOf(1, 4, 6, 9, 12, 16) else listOf(1, 4, 9, 16)).forEach { n ->
                 TextButton(onClick = { store.updateSettings { it.copy(gridSize = n) } }) {
                     Text("$n", color = if (n == size) C.accent2 else C.muted, fontWeight = if (n == size) FontWeight.Bold else FontWeight.Normal)

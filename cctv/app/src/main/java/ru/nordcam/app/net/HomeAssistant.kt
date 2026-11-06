@@ -76,8 +76,8 @@ class HomeAssistant(baseUrl: String, private val token: String, trustAll: Boolea
 
 /** Своя кнопка: запрос по ссылке (Shelly, Sonoff, ESP, контроллер ворот…). */
 object HttpAction {
-    fun run(item: HomeItem): String? = try {
-        val b = Request.Builder().url(item.url.trim())
+    fun run(item: HomeItem, off: Boolean = false): String? = try {
+        val b = Request.Builder().url((if (off) item.urlOff else item.url).trim())
         if (item.method.equals("POST", true)) {
             val ct = if (item.body.trim().startsWith("{")) "application/json" else "application/x-www-form-urlencoded"
             b.post(item.body.toRequestBody(ct.toMediaType()))

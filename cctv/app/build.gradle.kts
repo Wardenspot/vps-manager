@@ -8,7 +8,7 @@ val versionCodeEnv = (System.getenv("NC_VERSION_CODE") ?: "1").toInt()
 
 android {
     namespace = "ru.nordcam.app"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "ru.nordcam.app"
@@ -43,15 +43,19 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures {
         compose = true
         buildConfig = true
+        aidl = true
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         jniLibs.useLegacyPackaging = true
     }
+}
+
+kotlin {
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
 }
 
 dependencies {
@@ -69,7 +73,9 @@ dependencies {
     implementation("androidx.biometric:biometric:1.1.0")
     // Складные телефоны: положение сгиба (книжка / ноутбук)
     implementation("androidx.window:window:1.3.0")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:5.3.0")
+    // Встроенный VPN: WireGuard и AmneziaWG (обфускация от блокировок), совместим с обычными конфигами WireGuard
+    implementation("com.zaneschepke:amneziawg-android:2.3.7")
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0") { isTransitive = false }
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")

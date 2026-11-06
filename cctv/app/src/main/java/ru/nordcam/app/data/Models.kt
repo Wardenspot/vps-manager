@@ -174,6 +174,8 @@ data class Settings(
     val haUrl: String = "",
     val haToken: String = "",
     val haTrust: Boolean = false,
+    /** Выбранный профиль VPN до дома. */
+    val vpnId: String = "",
 ) {
     val haReady: Boolean get() = haUrl.isNotBlank() && haToken.isNotBlank()
 
@@ -192,7 +194,7 @@ data class Settings(
         .put("lastGroup", lastGroup)
         .put("mailHost", mailHost).put("mailPort", mailPort).put("mailUser", mailUser)
         .put("mailPass", mailPass).put("mailTo", mailTo)
-        .put("mailSecurity", mailSecurity).put("mailFrom", mailFrom).put("mailTrust", mailTrust).put("haUrl", haUrl).put("haToken", haToken).put("haTrust", haTrust).put("theme", theme).put("accent", accent)
+        .put("mailSecurity", mailSecurity).put("mailFrom", mailFrom).put("mailTrust", mailTrust).put("haUrl", haUrl).put("haToken", haToken).put("haTrust", haTrust).put("vpnId", vpnId).put("theme", theme).put("accent", accent)
 
     companion object {
         fun from(o: JSONObject?) = if (o == null) Settings() else Settings(
@@ -221,6 +223,7 @@ data class Settings(
             haUrl = o.optString("haUrl"),
             haToken = o.optString("haToken"),
             haTrust = o.optBoolean("haTrust", false),
+            vpnId = o.optString("vpnId"),
         )
     }
 }

@@ -80,6 +80,26 @@ class Store(private val ctx: Context) {
         _ups.value = list
     }
 
+    // ---- VPN до дома ----
+    private val _vpn = MutableStateFlow(
+        try { JSONArray(prefs.getString("vpn", "[]")).mapObjects { ru.nordcam.app.vpn.VpnProfile.from(it) } } catch (e: Exception) { emptyList() },
+    )
+    val vpn: StateFlow<List<ru.nordcam.app.vpn.VpnProfile>> = _vpn
+
+    @Synchronized
+    fun saveVpn(list: List<ru.nordcam.app.vpn.VpnProfile>) {
+        val arr = JSONArray()
+        list.forEach { arr.put(it.toJson()) }
+        prefs.edit().putString("vpn", arr.toString()).apply()
+        _vpn.value = list
+    }
+
+    /** Выбранный VPN-профиль (или первый, если выбор не сделан). */
+    fun activeVpn(): ru.nordcam.app.vpn.VpnProfile? {
+        val list = _vpn.value
+        return list.firstOrNull { it.id == _settings.value.vpnId } ?: list.firstOrNull()
+    }
+
     // ---- умный дом ----
     private val _home = MutableStateFlow(
         try { JSONArray(prefs.getString("home", "[]")).mapObjects { HomeItem.from(it) }.sortedBy { it.order } } catch (e: Exception) { emptyList() },

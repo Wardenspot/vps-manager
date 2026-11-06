@@ -223,6 +223,7 @@ fun HomeTab(nav: Nav) {
 
     Column(Modifier.fillMaxSize()) {
         Bar("Дом") {
+            VpnIndicator(nav)
             IconButton(onClick = { force++ }) { Icon(Icons.Default.Refresh, "Обновить") }
             if (s.haReady) IconButton(onClick = { nav.go(Screen.HaWeb) }) { Icon(Icons.Default.Language, "Home Assistant целиком") }
             IconButton(onClick = { nav.go(Screen.HomeSetup) }) { Icon(Icons.Default.Edit, "Настроить") }
@@ -298,20 +299,25 @@ fun HomeControls(i: HomeItem, e: HaEntity?) {
     fun guarded(question: String, f: () -> Unit) { if (i.confirm) ask = question to f else f() }
 
     if (i.kind == "http") {
-        FilledTonalButton(enabled = !busy, onClick = {
-            guarded("${itemName(i, null)}?") {
-                busy = true
-                scope.launch {
-                    val err = withContext(Dispatchers.IO) { HttpAction.run(i) }
-                    busy = false
-                    toast(ctx, err ?: "Готово")
-                }
+        fun http(off: Boolean) {
+            busy = true
+            scope.launch {
+                val err = withContext(Dispatchers.IO) { HttpAction.run(i, off) }
+                busy = false
+                toast(ctx, err ?: "Готово")
             }
-        }, modifier = Modifier.fillMaxWidth()) { Text(if (busy) "…" else "Выполнить") }
+        }
+        if (i.urlOff.isNotBlank()) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FilledTonalButton(enabled = !busy, onClick = { guarded("Включить «${itemName(i, null)}»?") { http(false) } }, modifier = Modifier.weight(1f)) { Text("Вкл") }
+            OutlinedButton(enabled = !busy, onClick = { guarded("Выключить «${itemName(i, null)}»?") { http(true) } }, modifier = Modifier.weight(1f)) { Text("Выкл") }
+        } else FilledTonalButton(enabled = !busy, onClick = { guarded("${itemName(i, null)}?") { http(false) } }, modifier = Modifier.fillMaxWidth()) {
+            Text(if (busy) "…" else "Выполнить")
+        }
     } else if (e != null && !e.unavailable) {
         val d = e.domain
         when (d) {
-            "switch", "light", "fan", "input_boolean", "siren", "automation", "humidifier" -> Row(verticalAlignment = Alignment.CenterVertically) {
+            "light" -> LightControls(e, busy) { service, data -> act(d, service, data) }
+            "switch", "fan", "input_boolean", "siren", "automation", "humidifier" -> Row(verticalAlignment = Alignment.CenterVertically) {
                 Spacer(Modifier.weight(1f))
                 Switch(checked = e.state == "on", enabled = !busy, onCheckedChange = { on ->
                     guarded(if (on) "Включить «${itemName(i, e)}»?" else "Выключить «${itemName(i, e)}»?") { act(d, if (on) "turn_on" else "turn_off") }
@@ -442,3 +448,62 @@ fun CameraHomeActions(camId: String) {
 
 /** Есть ли что показать на вкладке «Дом» — тогда она появляется в нижнем меню. */
 fun homeEnabled(ctx: Context): Boolean = ctx.app.store.home.value.isNotEmpty() || ctx.app.store.settings.value.haReady
+
+/** Свет: вкл/выкл, яркость, цвет и тёплый/холодный белый — что умеет лампа. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LightControls(e: HaEntity, busy: Boolean, call: (String, JSONObject) -> Unit) {
+    val modes = e.attrs.optJSONArray("supported_color_modes")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
+    val on = e.state == "on"
+    val dimmable = modes.any { it != "onoff" } || e.attrs.has("brightness")
+    val color = modes.any { it in setOf("hs", "xy", "rgb", "rgbw", "rgbww") }
+    val temp = modes.contains("color_temp") || modes.any { it in setOf("rgbww") }
+    val bri = if (on) e.attrs.optInt("brightness", 255) else 0
+    var pos by remember(e.state, bri) { androidx.compose.runtime.mutableFloatStateOf(bri / 255f) }
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(if (on && dimmable) "${(bri * 100 / 255)}%" else "", color = C.muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Switch(checked = on, enabled = !busy, onCheckedChange = { v -> call(if (v) "turn_on" else "turn_off", JSONObject()) })
+        }
+        if (dimmable) {
+            androidx.compose.material3.Slider(
+                value = pos, onValueChange = { pos = it },
+                onValueChangeFinished = {
+                    val pct = (pos * 100).toInt()
+                    if (pct <= 0) call("turn_off", JSONObject()) else call("turn_on", JSONObject().put("brightness_pct", pct.coerceIn(1, 100)))
+                },
+                enabled = !busy,
+            )
+        }
+        if (temp || color) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (temp) {
+                listOf(Triple("Тёплый", 2700, Color(0xFFFFB46B)), Triple("Нейтр.", 4000, Color(0xFFFFE4C4)), Triple("Холодный", 6500, Color(0xFFDDE8FF))).forEach { (t, k, c) ->
+                    Swatch(c, t, busy) { call("turn_on", JSONObject().put("color_temp_kelvin", k)) }
+                }
+            }
+            if (color) {
+                listOf(
+                    Color(0xFFFF3B30) to intArrayOf(255, 40, 30), Color(0xFFFF9500) to intArrayOf(255, 140, 0),
+                    Color(0xFFFFE600) to intArrayOf(255, 230, 0), Color(0xFF34C759) to intArrayOf(40, 220, 80),
+                    Color(0xFF00C7FF) to intArrayOf(0, 200, 255), Color(0xFF2F6BFF) to intArrayOf(40, 90, 255),
+                    Color(0xFFAF52DE) to intArrayOf(175, 80, 222), Color(0xFFFF2D92) to intArrayOf(255, 45, 146),
+                ).forEach { (c, rgb) ->
+                    Swatch(c, null, busy) { call("turn_on", JSONObject().put("rgb_color", org.json.JSONArray().put(rgb[0]).put(rgb[1]).put(rgb[2]))) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Swatch(c: Color, label: String?, busy: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.height(28.dp).then(if (label == null) Modifier.width(28.dp) else Modifier)
+            .background(c, RoundedCornerShape(14.dp))
+            .clickable(enabled = !busy, onClick = onClick)
+            .padding(horizontal = if (label == null) 0.dp else 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (label != null) Text(label, fontSize = 11.sp, color = Color(0xFF1B1F24))
+    }
+}

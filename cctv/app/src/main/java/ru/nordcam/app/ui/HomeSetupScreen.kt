@@ -233,7 +233,8 @@ private fun ItemDialog(i0: HomeItem, onClose: () -> Unit) {
                 Field(i.name, { i = i.copy(name = it) }, "Название", hint = if (i.kind == "http") "Открыть ворота" else e?.name.orEmpty(), modifier = Modifier.padding(0.dp))
                 Field(i.room, { i = i.copy(room = it) }, "Комната / группа", hint = "Двор, Котельная…")
                 if (i.kind == "http") {
-                    Field(i.url, { i = i.copy(url = it.trim()) }, "Ссылка", hint = "http://192.168.1.30/relay/0?turn=on", singleLine = false)
+                    Field(i.url, { i = i.copy(url = it.trim()) }, if (i.urlOff.isBlank()) "Ссылка" else "Ссылка включения", hint = "http://192.168.1.30/relay/0?turn=on", singleLine = false)
+                    Field(i.urlOff, { i = i.copy(urlOff = it.trim()) }, "Ссылка выключения (для света и реле)", hint = "http://192.168.1.30/relay/0?turn=off", singleLine = false)
                     Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf("GET", "POST").forEach { m -> FilterChip(i.method == m, { i = i.copy(method = m) }, { Text(m) }) }
                     }
@@ -241,7 +242,7 @@ private fun ItemDialog(i0: HomeItem, onClose: () -> Unit) {
                     Field(i.user, { i = i.copy(user = it.trim()) }, "Логин (если нужен)")
                     Field(i.pass, { i = i.copy(pass = it) }, "Пароль", password = true)
                     Text(
-                        "Shelly: http://IP/relay/0?turn=on (импульс — в настройках реле «Auto off»). Sonoff DIY: POST http://IP:8081/zeroconf/switch. " +
+                        "Shelly: http://IP/relay/0?turn=on и …?turn=off (свет), для ворот — импульс через «Auto off» в настройках реле. Shelly Dimmer/RGBW: http://IP/light/0?turn=on&brightness=50. Sonoff DIY: POST http://IP:8081/zeroconf/switch. " +
                             "Подойдёт любой контроллер ворот или домофона, который открывается по ссылке.",
                         color = C.muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                     )

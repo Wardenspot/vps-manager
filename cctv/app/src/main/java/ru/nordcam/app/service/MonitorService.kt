@@ -79,6 +79,7 @@ class MonitorService : Service() {
             watcher = scope.launch {
                 launch { upsLoop() }
                 launch { homeLoop() }
+                launch { vpnLoop() }
                 while (isActive) {
                     reconcile()
                     delay(3000)
@@ -296,6 +297,23 @@ class MonitorService : Service() {
                 prev[d.id] = s
             }
             delay(30_000)
+        }
+    }
+
+    // ------------------------------------------------------------------ VPN до дома
+
+    /** Режим «Всегда»: держим туннель поднятым, пока идёт наблюдение (разрешения уже выданы в приложении). */
+    private suspend fun vpnLoop() {
+        while (alive()) {
+            val p = app.store.activeVpn()
+            if (p != null && p.auto == ru.nordcam.app.vpn.VpnAuto.ALWAYS && p.kind != ru.nordcam.app.vpn.VpnKind.SYSTEM) {
+                ru.nordcam.app.vpn.HomeVpn.refresh(this, p)
+                val st = ru.nordcam.app.vpn.HomeVpn.state.value.status
+                if (st == ru.nordcam.app.vpn.VpnStatus.OFF || st == ru.nordcam.app.vpn.VpnStatus.ERROR) {
+                    ru.nordcam.app.vpn.HomeVpn.connect(this, p)
+                }
+            }
+            delay(60_000)
         }
     }
 

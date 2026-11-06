@@ -29,6 +29,9 @@ import ru.nordcam.app.ui.ServersScreen
 import ru.nordcam.app.ui.UpsScreen
 import ru.nordcam.app.ui.HomeSetupScreen
 import ru.nordcam.app.ui.HaWebScreen
+import ru.nordcam.app.ui.VpnScreen
+import ru.nordcam.app.ui.EditVpnScreen
+import ru.nordcam.app.ui.VpnAutoConnect
 import ru.nordcam.app.ui.FullscreenScreen
 import ru.nordcam.app.ui.HomeScreen
 import ru.nordcam.app.ui.ImportScreen
@@ -51,6 +54,8 @@ sealed interface Screen {
     data object Ups : Screen
     data object HomeSetup : Screen
     data object HaWeb : Screen
+    data object Vpn : Screen
+    data class EditVpn(val id: String?) : Screen
 }
 
 class Nav {
@@ -141,6 +146,7 @@ class MainActivity : FragmentActivity() {
 @Composable
 private fun Root(nav: Nav) {
     BackHandler(enabled = nav.stack.size > 1) { nav.back() }
+    VpnAutoConnect()
     when (val s = nav.top) {
         Screen.Home -> HomeScreen(nav)
         is Screen.Live -> FullscreenScreen(nav, s.camId)
@@ -154,5 +160,7 @@ private fun Root(nav: Nav) {
         Screen.Ups -> Centered { UpsScreen(nav) }
         Screen.HomeSetup -> Centered { HomeSetupScreen(nav) }
         Screen.HaWeb -> HaWebScreen(nav)
+        Screen.Vpn -> Centered { VpnScreen(nav) }
+        is Screen.EditVpn -> Centered { EditVpnScreen(nav, s.id) }
     }
 }

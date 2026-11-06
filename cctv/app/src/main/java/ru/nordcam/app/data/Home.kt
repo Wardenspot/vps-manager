@@ -24,6 +24,8 @@ data class HomeItem(
     val confirm: Boolean = false,
     // ---- своя HTTP-кнопка ----
     val url: String = "",
+    /** Ссылка выключения: если задана, у кнопки будут «Вкл» и «Выкл» (свет, реле). */
+    val urlOff: String = "",
     val method: String = "GET",
     val body: String = "",
     val user: String = "",
@@ -32,7 +34,7 @@ data class HomeItem(
 ) {
     fun toJson(): JSONObject = JSONObject().put("id", id).put("kind", kind).put("entityId", entityId).put("name", name)
         .put("room", room).put("cameraId", cameraId).put("alert", alert).put("confirm", confirm)
-        .put("url", url).put("method", method).put("body", body).put("user", user).put("pass", pass).put("order", order)
+        .put("url", url).put("urlOff", urlOff).put("method", method).put("body", body).put("user", user).put("pass", pass).put("order", order)
 
     companion object {
         fun from(o: JSONObject) = HomeItem(
@@ -45,6 +47,7 @@ data class HomeItem(
             alert = o.optBoolean("alert", false),
             confirm = o.optBoolean("confirm", false),
             url = o.optString("url"),
+            urlOff = o.optString("urlOff"),
             method = o.optString("method", "GET"),
             body = o.optString("body"),
             user = o.optString("user"),

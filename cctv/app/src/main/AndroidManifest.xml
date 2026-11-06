@@ -16,7 +16,21 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <!-- Включение туннелей в приложениях WireGuard и AmneziaWG (с согласия пользователя) -->
+    <uses-permission android:name="com.wireguard.android.permission.CONTROL_TUNNELS" />
+    <uses-permission android:name="org.amnezia.awg.permission.CONTROL_TUNNELS" />
+
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- Android 11+: видеть VPN-приложения, которыми NordCam умеет управлять -->
+    <queries>
+        <package android:name="de.blinkt.openvpn" />
+        <package android:name="com.wireguard.android" />
+        <package android:name="org.amnezia.awg" />
+        <intent>
+            <action android:name="de.blinkt.openvpn.api.IOpenVPNAPIService" />
+        </intent>
+    </queries>
 
     <application
         android:name=".CamApp"

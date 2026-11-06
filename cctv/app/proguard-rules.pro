@@ -13,3 +13,12 @@
 # security-crypto (Tink)
 -dontwarn com.google.errorprone.annotations.**
 -dontwarn javax.annotation.**
+# Встроенный VPN (AmneziaWG/WireGuard): нативная часть вызывает Java-классы
+-keep class org.amnezia.awg.** { *; }
+-dontwarn org.amnezia.awg.**
+-keep class com.getkeepsafe.relinker.** { *; }
+# API приложения «OpenVPN for Android»
+-keep class de.blinkt.openvpn.api.** { *; }
+# OkHttp 5
+-dontwarn okhttp3.**
+-dontwarn okio.**

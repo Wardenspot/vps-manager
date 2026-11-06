@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.VpnLock
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material3.FilterChip
 import androidx.compose.ui.draw.clip
@@ -148,6 +149,9 @@ fun MoreTab(nav: Nav) {
                 "Занято: ${fmtSize(used)}. Когда место закончится, самые старые записи удаляются автоматически.",
                 color = C.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )
+        }
+        Section("Доступ к дому") {
+            NavRow(Icons.Default.VpnLock, "VPN до дома", "WireGuard, AmneziaWG, IKEv2 с сертификатами, OpenVPN или VPN телефона") { nav.go(Screen.Vpn) }
         }
         Section("Умный дом") {
             NavRow(Icons.Default.Home, "Дом: отопление, ворота, датчики", "Home Assistant или свои кнопки (Shelly, Sonoff, реле)") { nav.go(Screen.HomeSetup) }
