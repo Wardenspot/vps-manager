@@ -58,8 +58,8 @@ func TestPlan(t *testing.T) {
 	if len(vpn) != 2 || vpn[0].String() != "0.0.0.0/1" || vpn[1].String() != "128.0.0.0/1" {
 		t.Errorf("всё через VPN: %v", vpn)
 	}
-	if len(direct) != 2 || direct[1].String() != "77.88.8.8/32" {
-		t.Errorf("Яндекс DNS напрямую: %v", direct)
+	if len(direct) != 2+len(rules.RemoteIPs) || direct[1].String() != "77.88.8.8/32" || direct[2].String() != rules.RemoteIPs[0]+"/32" {
+		t.Errorf("Яндекс DNS и удалённый доступ напрямую: %v", direct)
 	}
 }
 
@@ -136,9 +136,13 @@ func TestHook(t *testing.T) {
 	}
 	d.Clear()
 	mode = rules.ModeAll
-	h("vk.com.", ips, 60, rules.Direct)
+	h("vk.com.", ips, 60, rules.VPN) // в «всё через VPN» Route отдаёт VPN для всего, кроме удалённого доступа
 	if d.Len() != 0 {
-		t.Error("всё через VPN: ничего не добавляем")
+		t.Error("всё через VPN: обычные сайты не добавляем")
+	}
+	h("relay.rudesktop.ru.", ips[:1], 60, rules.Direct)
+	if d.Len() != 1 {
+		t.Errorf("всё через VPN: удалённый доступ — напрямую, %v", ops.log)
 	}
 }
 

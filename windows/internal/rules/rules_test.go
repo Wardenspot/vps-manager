@@ -100,3 +100,17 @@ func TestParse(t *testing.T) {
 		t.Error("a.com")
 	}
 }
+
+func TestRemoteAlwaysDirect(t *testing.T) {
+	r := New(Data{VPNDomains: []string{"anydesk.com"}})
+	for _, m := range []string{ModeSmart, ModeExceptRU, ModeAll} {
+		for _, n := range []string{"rudesktop.ru", "relay.rudesktop.ru.", "net.anydesk.com", "rustdesk.com"} {
+			if r.Route(n, m) != Direct {
+				t.Errorf("%s в режиме %s должен идти напрямую", n, m)
+			}
+		}
+		if m == ModeAll && r.Route("example.org", m) != VPN {
+			t.Error("остальное в «всё через VPN» — через VPN")
+		}
+	}
+}

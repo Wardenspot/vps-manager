@@ -4,7 +4,7 @@
   --ok: #3FD08A; --ok-soft: #12261C; --ok-text: #7EE2B0;
   --warn: #F2A33A; --warn-soft: #2A1E0E; --warn-line: #5C4317; --warn-text: #F5B65A;
   --bad: #FF7A7A; --bad-soft: #3A1F22; --off: #6B7684;
-  --r: 14px;
+  --r: 14px; --col: 680px;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -36,7 +36,7 @@ a { color: var(--link); }
 .row { display: flex; gap: 8px; align-items: center; }
 .row > .grow { flex: 1; min-width: 0; }
 .wrap { flex-wrap: wrap; }
-.center { margin: 0 auto; max-width: 640px; width: 100%; }
+.center { margin: 0 auto; max-width: var(--col); width: 100%; }
 
 @media (max-width: 759px) {
   .shell { flex-direction: column-reverse; }
@@ -50,6 +50,10 @@ a { color: var(--link); }
   .nav button { padding: 10px 12px; font-size: 14.5px; text-align: left; }
   .nav .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px; font-weight: 700; font-size: 17px; }
   .nav .brand img { width: 30px; height: 30px; }
+  /* заголовок и чат — по той же колонке, что и содержимое страницы */
+  .top { padding-left: max(16px, calc((100% - var(--col)) / 2)); padding-right: max(12px, calc((100% - var(--col)) / 2 - 4px)); }
+  .body.flush > .chat, .body.flush > .quick, .body.flush > .compose {
+    padding-left: max(16px, calc((100% - var(--col)) / 2)); padding-right: max(16px, calc((100% - var(--col)) / 2)); }
 }
 
 /* элементы */
@@ -108,6 +112,15 @@ textarea.in { resize: vertical; min-height: 44px; }
 .menu.danger, .menu.danger svg { color: var(--bad); }
 .list-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); }
 .list-row:first-child { border-top: 0; }
+.list-row > .grow { flex: 1; min-width: 0; }
+/* переключатели вместо галочек */
+input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 40px; height: 22px; border-radius: 999px; background: var(--line);
+  position: relative; cursor: pointer; flex: none; margin: 0; transition: background .15s; }
+input[type=checkbox]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #c9d1d9; transition: transform .15s, background .15s; }
+input[type=checkbox]:checked { background: var(--accent); }
+input[type=checkbox]:checked::after { transform: translateX(18px); background: #fff; }
+input[type=checkbox]:disabled { opacity: .5; cursor: default; }
+input[type=checkbox]:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .bar-progress { height: 3px; background: linear-gradient(90deg, transparent, var(--link), transparent); background-size: 50% 100%; background-repeat: no-repeat; animation: slide 1.1s linear infinite; }
 @keyframes slide { from { background-position: -50% 0; } to { background-position: 150% 0; } }
 .spin { width: 22px; height: 22px; border: 2.5px solid var(--line); border-top-color: var(--link); border-radius: 50%; animation: rot .8s linear infinite; }
@@ -143,7 +156,7 @@ textarea.in { resize: vertical; min-height: 44px; }
 .bubble.mine { align-self: flex-end; background: var(--accent); color: #fff; }
 .bubble.ai { background: var(--accent-soft); }
 .compose { display: flex; gap: 8px; padding: 10px 12px; background: var(--bar); border-top: 1px solid var(--line); align-items: flex-end; }
-.quick { display: flex; gap: 6px; overflow-x: auto; padding: 6px 12px; }
+.quick { display: flex; gap: 6px; flex-wrap: wrap; padding: 6px 12px; }
 .quick button { flex: none; }
 
 /* график */

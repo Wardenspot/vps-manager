@@ -26,7 +26,7 @@ async function req(method, path, body) {
   let j = {};
   try { j = text ? JSON.parse(text) : {}; } catch (e) { j = {}; }
   if (r.status === 401 && path.startsWith('/api/')) { S.logged_in = false; setTimeout(boot, 0); }
-  if (!r.ok) throw new ApiError(r.status, j.error || `Ошибка (${r.status})`);
+  if (!r.ok) throw new ApiError(r.status, (r.status === 404 && (!j.error || j.error === 'нет такого адреса')) ? 'на сервере NordKey нет этой функции — напишите в поддержку' : (j.error || `Ошибка (${r.status})`));
   return j;
 }
 const local = (m, p, b) => req(m, '/local' + p, b);
@@ -300,7 +300,7 @@ function vpnScreen() {
     const on = S.vpn && (S.vpn.state === 'on' || S.vpn.state === 'connecting');
     if (!on) { S.vpn = { ...(S.vpn || {}), state: 'connecting' }; paint(); }
     try { S = await local('POST', on ? '/disconnect' : '/connect'); }
-    catch (e) { toast('⚠️ ' + e.message); await refresh(); }
+    catch (e) { await refresh(); if (!S.error) toast('⚠️ ' + e.message); }
     busy = false; paint();
   };
 
@@ -322,7 +322,7 @@ function vpnScreen() {
     const w = [];
     const pc = S.pc || {};
     const sub_ = pc.subscription;
-    if (S.error) w.push(h('div.card.warn', h('div.t', S.error)));
+    if (S.error) w.push(h('div.card.warn', h('div.t', 'Не подключилось'), h('div.small', S.error)));
     if (sub_ && !sub_.active && !pc.staff) w.push(h('div.card.warn', h('div.t', 'Подписка закончилась'), h('div', 'VPN на компьютере работает, пока активна подписка. Продлите её во вкладке «Подписка».')));
     if (stale) w.push(h('div.card.warn', h('div.t', 'Сервер не отвечает'), h('div.small', 'Проверьте интернет. Если интернет есть, а связи нет больше пары минут — выключите и включите VPN или напишите в поддержку.')));
     if (st === 'on' && v.dns_ok === false) w.push(h('div.card.warn', h('div.t', 'Windows обходит NordKey при поиске сайтов'),
@@ -333,7 +333,7 @@ function vpnScreen() {
     }, h('span.radio'), h('div', h('div.t', t), h('div.d', d)))));
     const r = S.rules;
     if (r && r.version !== lastVer) { if (lastVer !== null) loadSites(); lastVer = r.version; } // поддержка пустила сайт — покажем
-    info.textContent = r ? `Списки сайтов: через VPN ${r.vpn}, напрямую ${r.direct}, сетей ${r.nets} · версия ${r.version}` : 'Списки сайтов загрузятся при первом включении';
+    info.textContent = r ? `Списки сайтов: через VPN ${r.vpn}, напрямую ${r.direct}, сетей ${r.nets}` : (S.error ? '' : 'Списки сайтов загрузятся при первом включении');
   }
   const tile = (k, v, cls) => h('div.tile' + (cls ? '.' + cls : ''), h('div.k', k), h('div.v', v));
 
@@ -345,7 +345,7 @@ function vpnScreen() {
         h('span.chip', { style: m === 'direct' ? { background: 'var(--ok-soft)', color: 'var(--ok-text)' } : {} }, m === 'vpn' ? 'через VPN' : 'напрямую'),
         h('span.grow', d),
         staff ? h('button.icon-btn', { title: 'Убрать', onclick: () => setSite(d, 'remove') }, ico('close')) : null))) : h('div.muted.small', 'Пока ничего — всё идёт по общим спискам NordKey.'));
-    } catch (e) { sites.replaceChildren(h('div.muted.small', e.message)); }
+    } catch (e) { sites.replaceChildren(S.error && S.error.includes(e.message) ? [] : h('div.muted.small', 'Свои сайты не загрузились: ' + e.message)); }
   }
   async function setSite(domain, mode) {
     pg.busy(true);
@@ -491,7 +491,7 @@ function routerScreen(ip) {
     };
     loadHist();
     const game = r.game && r.game.available ? (() => {
-      const cb = h('input', { type: 'checkbox', checked: !!r.game.on, disabled: !canWrite, style: { width: '20px', height: '20px' } });
+      const cb = h('input', { type: 'checkbox', checked: !!r.game.on, disabled: !canWrite });
       cb.onchange = () => act(async () => { const x = await api.post(`/v1/routers/${ip}/game`, { on: cb.checked }); cb.checked = !!x.on; return x.on ? 'Игровой режим включён' : 'Выключен'; });
       return h('div.card', h('label.row', { style: { cursor: 'pointer' } }, h('div.grow', h('div.t', 'Игровой режим'), h('div.muted.small', 'подскажет пустить игровой сервер напрямую, если через VPN высокий пинг')), cb));
     })() : null;
@@ -781,9 +781,9 @@ function autopilotScreen() {
     const active = list.filter(i => ['need_approval', 'escalated', 'open'].includes(i.status)), done = list.filter(i => !active.includes(i));
     return h('div.center.col',
       h('div.card', SET.map(([k, t]) => {
-        const cb = h('input', { type: 'checkbox', checked: s[k] !== false, disabled: !can('routers.admin'), style: { width: '18px', height: '18px' } });
+        const cb = h('input', { type: 'checkbox', checked: s[k] !== false, disabled: !can('routers.admin') });
         cb.onchange = () => act(async () => { await api.post('/v1/staff/guard/settings', { [k]: cb.checked }); });
-        return h('label.list-row', { style: { cursor: 'pointer' } }, h('span.grow', t), cb);
+        return h('label.list-row', { style: { cursor: 'pointer', padding: '10px 0' } }, h('span.grow', t), cb);
       }), h('div.muted.small', 'Сам: перезапуск служб сервера, чистка диска, починка DNS на роутере, WARP. По кнопке: перезагрузка роутера, изменения маршрутов и DNS. Никогда: удаление, оплаты, роли.')),
       active.length ? [h('div.sect', 'Требует внимания'), active.map(row)] : h('div.card.ok', h('div.t.okc', 'Всё спокойно — ничего не требует внимания')),
       done.length ? [h('div.sect', 'За последние 3 дня'), done.map(row)] : null);

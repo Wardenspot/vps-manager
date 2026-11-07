@@ -103,6 +103,11 @@ func Plan(mode string, r *rules.Rules, c Config) (vpn, direct []netip.Prefix) {
 	case rules.ModeExceptRU, rules.ModeAll:
 		vpn = append(vpn, netip.MustParsePrefix("0.0.0.0/1"), netip.MustParsePrefix("128.0.0.0/1"))
 		direct = append(direct, netip.PrefixFrom(dnsDirect, 32))
+		for _, s := range rules.RemoteIPs { // удалённый доступ — мимо туннеля
+			if a, err := netip.ParseAddr(s); err == nil {
+				direct = append(direct, netip.PrefixFrom(a, 32))
+			}
+		}
 	default:
 		vpn = append(vpn, netip.PrefixFrom(dnsVPN, 32))
 		vpn = append(vpn, r.Nets()...)
@@ -238,7 +243,7 @@ func (d *Dyn) Clear() {
 }
 
 // Hook — что делать с ответом DNS в этом режиме: в «умном» — адреса сайтов через VPN в туннель;
-// в «всё, кроме российского» — российские адреса напрямую; в «всё через VPN» — ничего (и так всё в туннеле).
+// в «всё, кроме российского» — российские адреса напрямую; в «всё через VPN» — напрямую только удалённый доступ.
 func Hook(d *Dyn, mode func() string) func(name string, ips []netip.Addr, ttl uint32, route rules.Decision) {
 	return func(name string, ips []netip.Addr, ttl uint32, route rules.Decision) {
 		m := mode()
@@ -246,7 +251,7 @@ func Hook(d *Dyn, mode func() string) func(name string, ips []netip.Addr, ttl ui
 			switch {
 			case m == rules.ModeSmart && route == rules.VPN:
 				d.Ensure(ip, true, ttl)
-			case m == rules.ModeExceptRU && route == rules.Direct:
+			case (m == rules.ModeExceptRU || m == rules.ModeAll) && route == rules.Direct:
 				d.Ensure(ip, false, ttl)
 			}
 		}

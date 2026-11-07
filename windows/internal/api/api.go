@@ -123,6 +123,9 @@ func (c *Client) Call(method, path, token string, in, out any) error {
 			Error string `json:"error"`
 		}
 		_ = json.Unmarshal(b, &e)
+		if code == 404 && (e.Error == "" || e.Error == "нет такого адреса") {
+			e.Error = "на сервере NordKey нет этой функции — напишите в поддержку (сервер нужно обновить)"
+		}
 		if e.Error == "" {
 			e.Error = fmt.Sprintf("ошибка сервера (%d)", code)
 		}
