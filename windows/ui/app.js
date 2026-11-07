@@ -196,12 +196,19 @@ function page(title, opts = {}) {
   };
 }
 // load — загрузить и построить; ошибки — с кнопкой «Повторить»
+// повторная загрузка (автообновление, кнопка «обновить») — тихо: без крутилки, на том же месте прокрутки
 async function load(into, f, build) {
-  into.replaceChildren(h('div.loading', h('div.spin')));
+  const sc = into.closest('.body') || into;
+  const quiet = into.dataset.loaded === '1';
+  const pos = sc.scrollTop;
+  if (!quiet) into.replaceChildren(h('div.loading', h('div.spin')));
   try {
     const d = await f();
     into.replaceChildren(...[].concat(build(d)).filter(Boolean));
+    into.dataset.loaded = '1';
+    if (quiet) sc.scrollTop = pos;
   } catch (e) {
+    if (quiet) return; // при автообновлении ошибку не показываем — остаётся то, что было
     into.replaceChildren(h('div.col', { style: { padding: '24px 0' } }, h('div.card.warn', h('div.t', e.message)),
       h('button.btn.ghost', { onclick: () => load(into, f, build) }, 'Повторить')));
   }

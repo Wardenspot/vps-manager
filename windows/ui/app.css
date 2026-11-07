@@ -12,6 +12,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   font: 15px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
 body { overflow: hidden; }
 button, input, textarea, select { font: inherit; color: inherit; }
+svg { width: 22px; height: 22px; flex: none; } /* значки без своего размера не раздуваются */
+.row > svg { color: var(--muted); }
 a { color: var(--link); }
 #app { height: 100%; display: flex; }
 .splash { margin: auto; display: grid; justify-items: center; gap: 18px; }
