@@ -160,8 +160,30 @@ func (r *Rules) Match(name string) (Decision, string) {
 	return None, ""
 }
 
+// Удалённый доступ (через него поддержка подключается к компьютеру клиента) — всегда напрямую, в любом режиме:
+// через шведский адрес он тормозит или рвётся, а при смене режима обрывалась бы открытая сессия.
+var remoteDomains = []string{"rudesktop.ru", "rudesktop.com", "anydesk.com", "anydesk.net", "rustdesk.com", "teamviewer.com", "assistant.ru"}
+
+// RemoteIPs — серверы-ретрансляторы RuDesktop (подключаются по адресу, без имени), как в nk-fix на роутерах.
+var RemoteIPs = []string{"81.163.20.147", "217.168.244.231", "5.182.226.192", "81.163.20.204",
+	"185.184.79.15", "185.193.90.129", "185.193.90.94", "91.236.196.93"}
+
+// Remote — имя сервиса удалённого доступа.
+func Remote(name string) bool {
+	n := normalize(name)
+	for _, d := range remoteDomains {
+		if n == d || strings.HasSuffix(n, "."+d) {
+			return true
+		}
+	}
+	return false
+}
+
 // Route — куда в итоге идёт домен в этом режиме.
 func (r *Rules) Route(name, mode string) Decision {
+	if Remote(name) {
+		return Direct
+	}
 	d, _ := r.Match(name)
 	switch mode {
 	case ModeAll:

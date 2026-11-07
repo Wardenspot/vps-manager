@@ -227,7 +227,10 @@ func (w *win) Up(c Config, r *rules.Rules, mode string) error {
 		ifr.UseAutomaticMetric = false
 		ifr.Metric = 5
 		ifr.NLMTU = uint32(c.Mtu())
-		_ = ifr.Set()
+		ifr.SitePrefixLength = 0 // для IPv4 Windows требует 0, иначе отклоняет всю настройку
+		if err := ifr.Set(); err != nil {
+			w.logf("настройка адаптера (MTU %d, метрика): %v", c.Mtu(), err)
+		}
 	}
 	g := defaultGateway(w.luid)
 	w.gw.Store(&g)
