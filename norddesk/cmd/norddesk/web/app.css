@@ -280,3 +280,12 @@ body.dragover #drop { display: flex; }
 }
 
 #toolbar .q input[type=range] { width: 84px; }
+
+.warn-line {
+  margin: 14px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(229, 72, 77, .12);
+  color: #ff9a9d;
+  font-size: 13px;
+}

@@ -22,7 +22,9 @@ func startRelay(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	go relaysrv.New().Serve(ln)
+	h := relaysrv.New()
+	h.NoLimits = true // тесты переподключаются часто
+	go h.Serve(ln)
 	t.Cleanup(func() { ln.Close() })
 	return ln.Addr().String()
 }
@@ -293,5 +295,31 @@ func TestBatchToDesktop(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(filepath.Join(desk, "a.txt")); string(b) != "abc" {
 		t.Fatalf("a.txt: %q", b)
+	}
+}
+
+// Пауза растёт с каждой неудачей и не сбрасывается сменой кода; «новый код»
+// у человека за ПК её сбрасывает.
+func TestBackoffGrowsAcrossRotation(t *testing.T) {
+	a := New(Config{ID: "600700800", FilesDir: t.TempDir()})
+	code := a.Status().Code
+	want := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second}
+	for i, w := range want {
+		if got := a.noteFail(); got != w {
+			t.Fatalf("неудача %d: пауза %v, ждали %v", i+1, got, w)
+		}
+	}
+	if a.Status().Code == code {
+		t.Fatal("после 3 неудач код должен смениться")
+	}
+	if a.Status().Failed != 4 {
+		t.Fatalf("счётчик неудач %d, ждали 4", a.Status().Failed)
+	}
+	if backoff(20) != maxBackoff {
+		t.Fatal("пауза должна упираться в 5 минут")
+	}
+	a.RefreshCode()
+	if a.Status().Failed != 0 || a.noteFail() != 2*time.Second {
+		t.Fatal("«новый код» должен сбрасывать счётчик и паузу")
 	}
 }

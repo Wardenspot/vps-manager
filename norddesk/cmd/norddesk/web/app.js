@@ -83,6 +83,11 @@ function renderSelf(m) {
   $("selfState").className = "state " + cls;
   $("selfStateText").textContent = m.note ? `${text} (${m.note})` : text;
   $("endIncomingBtn").classList.toggle("hidden", !(m.state === "active" || m.state === "incoming"));
+  const failed = $("selfFailed");
+  failed.classList.toggle("hidden", !(m.failed > 0));
+  if (m.failed > 0) {
+    failed.textContent = `Неверный код вводили ${m.failed} раз подряд. Если это не ваш знакомый — кто-то подбирает код; нажмите ↻ для нового кода.`;
+  }
 }
 
 $("newCodeBtn").addEventListener("click", () => sendCmd({ cmd: "newcode" }));

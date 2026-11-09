@@ -32,6 +32,8 @@ var (
 	ErrTaken  = errors.New("relaylink: этот ID уже занят на релее")
 	ErrNoHost = errors.New("relaylink: хост с таким ID не в сети")
 	ErrBusy   = errors.New("relaylink: к хосту уже подключены")
+	// ErrSlow — релей ограничил частоту запросов с этого адреса.
+	ErrSlow = errors.New("relaylink: слишком много запросов, подождите минуту")
 )
 
 // Режим подключения — первый байт клиента после спаривания (до рукопожатия).
@@ -135,6 +137,9 @@ func DialHost(relayAddr, id string, timeout time.Duration) (net.Conn, error) {
 	case line == "TAKEN":
 		conn.Close()
 		return nil, ErrTaken
+	case line == "SLOW":
+		conn.Close()
+		return nil, ErrSlow
 	default:
 		conn.Close()
 		return nil, fmt.Errorf("relaylink: релей ответил %q", line)
@@ -182,6 +187,9 @@ func DialJoin(relayAddr, id string, timeout time.Duration) (net.Conn, error) {
 	case "BUSY":
 		conn.Close()
 		return nil, ErrBusy
+	case "SLOW":
+		conn.Close()
+		return nil, ErrSlow
 	default:
 		conn.Close()
 		return nil, fmt.Errorf("relaylink: релей ответил %q", line)

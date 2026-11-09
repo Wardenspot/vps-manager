@@ -12,6 +12,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -92,8 +93,14 @@ func main() {
 	if dir == "" {
 		dir = defaultConfigDir()
 	}
-	os.MkdirAll(dir, 0o700)
-	setupLog(dir)
+	// Копия с правами администратора ничего не пишет в папку пользователя:
+	// обычный процесс мог бы подменить её ссылкой на системную папку и заставить
+	// админскую копию перезаписать чужой файл.
+	elevated := winsys.IsElevated()
+	if !elevated {
+		os.MkdirAll(dir, 0o700)
+		setupLog(dir)
+	}
 
 	var rs *resumeState
 	if *resume {
@@ -120,13 +127,15 @@ func main() {
 	}
 	a.hook = newKeyHook(a.onHookKey)
 	uiURL := fmt.Sprintf("http://%s/?token=%s", ln.Addr().String(), a.token)
-	os.WriteFile(filepath.Join(dir, "ui.url"), []byte(uiURL), 0o600)
-	log.Printf("NordDesk запущен (администратор: %v), релей %s, окно %s", winsys.IsElevated(), *relayAddr, ln.Addr())
+	if !elevated {
+		os.WriteFile(filepath.Join(dir, "ui.url"), []byte(uiURL), 0o600)
+	}
+	log.Printf("NordDesk запущен (администратор: %v), релей %s, окно %s", elevated, *relayAddr, ln.Addr())
 
 	if hostSupported && !*noHost {
 		cfg := hostagent.Config{
 			Relay: *relayAddr,
-			ID:    loadOrCreateID(dir),
+			ID:    loadOrCreateID(dir, !elevated),
 			Confirm: func(sas string) bool {
 				return hostagent.ConfirmDialog("NordDesk — входящее подключение", hostagent.ConfirmText(sas))
 			},
@@ -145,7 +154,14 @@ func main() {
 	sub, _ := fs.Sub(webFS, "web")
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", a.serveIndex(sub))
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(sub))))
+	static := http.StripPrefix("/static/", http.FileServer(http.FS(sub)))
+	mux.HandleFunc("/static/", func(w http.ResponseWriter, r *http.Request) {
+		if !localOnly(r) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		static.ServeHTTP(w, r)
+	})
 	mux.HandleFunc("/ws", a.serveWS)
 	mux.HandleFunc("/ping", a.servePing)
 
@@ -189,10 +205,36 @@ func (a *app) uiSeen() bool {
 
 // --- окно ---
 
+// localOnly пропускает только запросы, адресованные именно 127.0.0.1/localhost.
+// Это защита от DNS rebinding: страница чужого сайта, «перепривязавшая» свой
+// домен на 127.0.0.1, приходит с Host: evil.example:порт и получает отказ.
+func localOnly(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		host = r.Host
+	}
+	return host == "127.0.0.1" || host == "localhost"
+}
+
+// authorized: локальный адрес + верный токен. Токен знает только окно,
+// открытое самим приложением (и файл ui.url в папке пользователя).
+func (a *app) authorized(w http.ResponseWriter, r *http.Request) bool {
+	if !localOnly(r) || subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("token")), []byte(a.token)) != 1 {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return false
+	}
+	return true
+}
+
 func (a *app) serveIndex(sub fs.FS) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
+			return
+		}
+		// Без токена страницу не отдаём: иначе любой локальный процесс или
+		// сайт (через DNS rebinding) прочитал бы из неё токен, а затем — ID и код.
+		if !a.authorized(w, r) {
 			return
 		}
 		raw, err := fs.ReadFile(sub, "index.html")
@@ -209,8 +251,7 @@ func (a *app) serveIndex(sub fs.FS) http.HandlerFunc {
 }
 
 func (a *app) servePing(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != a.token {
-		http.Error(w, "forbidden", 403)
+	if !a.authorized(w, r) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -218,8 +259,12 @@ func (a *app) servePing(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) serveWS(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != a.token {
-		http.Error(w, "forbidden", 403)
+	if !a.authorized(w, r) {
+		return
+	}
+	// WebSocket не подчиняется политике одного источника — проверяем Origin сами.
+	if o := r.Header.Get("Origin"); o != "" && o != "http://"+r.Host {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	c, err := localws.Accept(w, r)
@@ -458,6 +503,8 @@ func (a *app) dialHost(id, code string) (*secure.Conn, net.Conn, error) {
 			return nil, nil, errors.New("Компьютер с таким ID не в сети (NordDesk на нём закрыт?).")
 		case relaylink.ErrBusy:
 			return nil, nil, errors.New("К этому компьютеру уже подключены.")
+		case relaylink.ErrSlow:
+			return nil, nil, errors.New("Слишком много попыток подключения — подождите минуту.")
 		}
 		log.Printf("релей: %v", err)
 		return nil, nil, errors.New("Нет связи с сервером NordDesk.")
@@ -693,7 +740,7 @@ func defaultConfigDir() string {
 }
 
 // loadOrCreateID: постоянный ID компьютера — создаётся один раз.
-func loadOrCreateID(dir string) string {
+func loadOrCreateID(dir string, persist bool) string {
 	p := filepath.Join(dir, "id")
 	if b, err := os.ReadFile(p); err == nil {
 		if id := strings.TrimSpace(string(b)); relaysrv.ValidID(id) {
@@ -701,6 +748,9 @@ func loadOrCreateID(dir string) string {
 		}
 	}
 	id := relaylink.NewID()
+	if !persist {
+		return id
+	}
 	if err := os.WriteFile(p, []byte(id+"\n"), 0o600); err != nil {
 		log.Printf("не удалось сохранить ID: %v", err)
 	}

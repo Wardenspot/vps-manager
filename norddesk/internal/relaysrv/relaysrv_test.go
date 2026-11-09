@@ -145,3 +145,25 @@ func TestReRegisterAfterClose(t *testing.T) {
 		t.Fatalf("новая регистрация не получила клиента: %v", err)
 	}
 }
+
+// Перебор ID упирается в лимит: после всплеска запросы с того же IP отклоняются.
+func TestJoinRateLimit(t *testing.T) {
+	addr := start(t)
+	slow := false
+	for i := 0; i < 15; i++ {
+		_, err := relaylink.DialJoin(addr, "999999999", 3*time.Second)
+		if err == relaylink.ErrSlow {
+			slow = true
+			if i < 10 {
+				t.Fatalf("лимит сработал слишком рано: на попытке %d", i+1)
+			}
+			break
+		}
+		if err != relaylink.ErrNoHost {
+			t.Fatalf("попытка %d: %v", i+1, err)
+		}
+	}
+	if !slow {
+		t.Fatal("15 попыток подряд должны упереться в лимит")
+	}
+}

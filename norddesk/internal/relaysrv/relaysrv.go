@@ -35,11 +35,23 @@ type Hub struct {
 	hosts map[string]*waiting
 	// Logf — необязательный лог (по умолчанию молчит).
 	Logf func(format string, a ...any)
+	// NoLimits отключает ограничение частоты (только для тестов).
+	NoLimits bool
+
+	joins *limiter // попытки подключиться к хосту с одного IP
+	regs  *limiter // регистрации хостов с одного IP
 }
 
-// New создаёт пустой хаб.
+// New создаёт пустой хаб с ограничением частоты запросов.
 func New() *Hub {
-	return &Hub{hosts: make(map[string]*waiting), Logf: func(string, ...any) {}}
+	return &Hub{
+		hosts: make(map[string]*waiting),
+		Logf:  func(string, ...any) {},
+		// 20 подключений в минуту (всплеск до 10) — живому человеку хватает с
+		// запасом, а перебор ID и «заваливание» запросами упираются в лимит.
+		joins: newLimiter(20, 10),
+		regs:  newLimiter(30, 15),
+	}
 }
 
 // Serve принимает соединения, пока слушатель не закрыт.
@@ -78,6 +90,17 @@ func (h *Hub) Handle(conn net.Conn) {
 		return
 	}
 	cmd, id := fields[1], fields[2]
+	if !h.NoLimits {
+		lim := h.joins
+		if cmd == "HOST" {
+			lim = h.regs
+		}
+		if !lim.allow(remoteIP(conn)) {
+			io.WriteString(conn, "SLOW\n")
+			conn.Close()
+			return
+		}
+	}
 	if !ValidID(id) {
 		io.WriteString(conn, "ERR неверный ID\n")
 		conn.Close()
@@ -220,4 +243,60 @@ func ValidID(id string) bool {
 		}
 	}
 	return true
+}
+
+// --- ограничение частоты (токен-бакет на IP) ---
+
+type bucket struct {
+	tokens float64
+	last   time.Time
+}
+
+type limiter struct {
+	mu      sync.Mutex
+	perSec  float64
+	burst   float64
+	buckets map[string]*bucket
+	calls   int
+}
+
+func newLimiter(perMinute, burst float64) *limiter {
+	return &limiter{perSec: perMinute / 60, burst: burst, buckets: map[string]*bucket{}}
+}
+
+func (l *limiter) allow(ip string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	l.calls++
+	if l.calls%1000 == 0 { // изредка выбрасываем давно молчащих
+		for k, b := range l.buckets {
+			if now.Sub(b.last) > 10*time.Minute {
+				delete(l.buckets, k)
+			}
+		}
+	}
+	b, ok := l.buckets[ip]
+	if !ok {
+		b = &bucket{tokens: l.burst, last: now}
+		l.buckets[ip] = b
+	}
+	b.tokens += now.Sub(b.last).Seconds() * l.perSec
+	if b.tokens > l.burst {
+		b.tokens = l.burst
+	}
+	b.last = now
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
+}
+
+func remoteIP(c net.Conn) string {
+	host, _, err := net.SplitHostPort(c.RemoteAddr().String())
+	if err != nil {
+		return c.RemoteAddr().String()
+	}
+	return host
 }

@@ -37,6 +37,9 @@ type Status struct {
 	State State  `json:"state"`
 	Note  string `json:"note,omitempty"`
 	Admin bool   `json:"admin"` // процесс работает с правами администратора
+	// Failed — неверных кодов подряд (показывается человеку за ПК: если это
+	// не он сам ошибался — кто-то подбирает код).
+	Failed int `json:"failed"`
 }
 
 // Config — настройки агента.
@@ -66,9 +69,27 @@ type Config struct {
 }
 
 const (
-	maxFails         = 3
+	maxFails         = 3 // неверных попыток на один код, затем код меняется
 	handshakeTimeout = 20 * time.Second
+	maxBackoff       = 5 * time.Minute
+	strikesForget    = time.Hour // через час без неудач счётчик обнуляется
 )
+
+// backoff — пауза после n-й неудачи подряд: 2с, 4с, 8с … до 5 минут. При
+// 5-минутных паузах и коде из 6 цифр перебор занял бы в среднем годы.
+func backoff(n int) time.Duration {
+	if n <= 0 {
+		return 0
+	}
+	if n > 9 {
+		return maxBackoff
+	}
+	d := 2 * time.Second << (n - 1)
+	if d > maxBackoff {
+		d = maxBackoff
+	}
+	return d
+}
 
 // Agent — входящая часть одного компьютера.
 type Agent struct {
@@ -77,10 +98,13 @@ type Agent struct {
 	mu          sync.Mutex
 	st          Status
 	code        string
-	fails       int
-	conn        net.Conn // текущее соединение с релеем
+	fails       int       // неверных попыток для текущего кода
+	strikes     int       // неверных попыток подряд вообще (для паузы)
+	lastFail    time.Time //
+	conn        net.Conn  // текущее соединение с релеем
 	resume      string
 	resumeUntil time.Time
+	kick        chan struct{} // прервать паузу (человек нажал «новый код»)
 }
 
 // New создаёт агента. Сеть не трогает до вызова Run.
@@ -96,6 +120,7 @@ func New(cfg Config) *Agent {
 		st:          Status{ID: cfg.ID, State: StateConnecting, Admin: winsys.IsElevated()},
 		resume:      cfg.ResumeCode,
 		resumeUntil: cfg.ResumeUntil,
+		kick:        make(chan struct{}, 1),
 	}
 	a.newCodeLocked()
 	return a
@@ -126,8 +151,24 @@ func (a *Agent) Status() Status {
 	return a.st
 }
 
-// RefreshCode выдаёт новый одноразовый код; старый перестаёт подходить.
+// RefreshCode — кнопка «новый код» у человека за ПК: новый код, сброс счётчика
+// неудач и паузы (её нажимает только он, атакующий этого сделать не может).
 func (a *Agent) RefreshCode() {
+	a.mu.Lock()
+	a.newCodeLocked()
+	a.strikes = 0
+	a.st.Failed = 0
+	st := a.st
+	a.mu.Unlock()
+	a.emit(st)
+	select {
+	case a.kick <- struct{}{}:
+	default:
+	}
+}
+
+// rotate — смена одноразового кода без сброса счётчика неудач.
+func (a *Agent) rotate() {
 	a.mu.Lock()
 	a.newCodeLocked()
 	st := a.st
@@ -157,6 +198,7 @@ func (a *Agent) Run(stop <-chan struct{}) {
 			select {
 			case <-stop:
 				return
+			case <-a.kick:
 			case <-time.After(wait):
 			}
 		}
@@ -172,6 +214,10 @@ func (a *Agent) cycle(stop <-chan struct{}) time.Duration {
 		note := "нет связи с сервером"
 		if errors.Is(err, relaylink.ErrTaken) {
 			note = "этот ID уже в сети — приложение открыто на другом устройстве?"
+		} else if errors.Is(err, relaylink.ErrSlow) {
+			note = "слишком частые подключения к серверу, повтор через минуту"
+			a.set(StateOffline, note)
+			return time.Minute
 		}
 		a.cfg.Logf("релей: %v", err)
 		a.set(StateOffline, note)
@@ -227,6 +273,9 @@ func (a *Agent) cycle(stop <-chan struct{}) time.Duration {
 		a.dropResume() // код переподключения одноразовый
 		a.cfg.Logf("переподключение после повышения прав")
 	}
+	if mode == relaylink.ModePassword {
+		a.clearStrikes() // верный код — счётчик неудач обнуляется
+	}
 
 	if mode == relaylink.ModeRequest {
 		reject := func(why string) time.Duration {
@@ -260,24 +309,38 @@ func (a *Agent) cycle(stop <-chan struct{}) time.Duration {
 	return 0
 }
 
-// noteFail учитывает неверный код: после maxFails код меняется. Пауза растёт
-// с каждой неудачей, чтобы подбор был бессмысленно медленным.
+// noteFail учитывает неверный код: после maxFails код меняется, а пауза
+// растёт с каждой неудачей подряд и при смене кода не сбрасывается.
 func (a *Agent) noteFail() time.Duration {
 	a.mu.Lock()
-	a.fails++
-	fails := a.fails
-	rotated := false
-	if fails >= maxFails && a.cfg.Password == "" {
-		a.newCodeLocked()
-		rotated = true
+	if time.Since(a.lastFail) > strikesForget {
+		a.strikes = 0
 	}
+	a.lastFail = time.Now()
+	a.strikes++
+	a.fails++
+	if a.fails >= maxFails && a.cfg.Password == "" {
+		a.newCodeLocked()
+		a.cfg.Logf("%d неверных кода — код заменён", maxFails)
+	}
+	a.st.Failed = a.strikes
+	strikes, st := a.strikes, a.st
+	a.mu.Unlock()
+	a.emit(st)
+	d := backoff(strikes)
+	a.cfg.Logf("неверный код (%d подряд), пауза %v", strikes, d)
+	return d
+}
+
+func (a *Agent) clearStrikes() {
+	a.mu.Lock()
+	changed := a.strikes != 0
+	a.strikes, a.st.Failed = 0, 0
 	st := a.st
 	a.mu.Unlock()
-	if rotated {
-		a.cfg.Logf("%d неверных кода подряд — код заменён", fails)
+	if changed {
 		a.emit(st)
 	}
-	return time.Duration(fails) * 2 * time.Second
 }
 
 func (a *Agent) rotateOneTime() {
@@ -287,7 +350,7 @@ func (a *Agent) rotateOneTime() {
 		a.mu.Unlock()
 		return
 	}
-	a.RefreshCode()
+	a.rotate()
 }
 
 func (a *Agent) newCodeLocked() {
