@@ -18,20 +18,16 @@ var defaultRelay = "127.0.0.1:8765"
 func main() {
 	relay := flag.String("relay", defaultRelay, "адрес релея host:port")
 	id := flag.String("id", "", "постоянный ID (по умолчанию случайный)")
-	pw := flag.String("pw", "", "постоянный пароль (без подтверждения, для своих машин)")
-	noConfirm := flag.Bool("no-confirm", false, "не спрашивать согласие (ОПАСНО)")
+	pw := flag.String("pw", "", "постоянный пароль вместо одноразового кода (для своих машин)")
 	dir := flag.String("dir", "", "куда класть принятые файлы (по умолчанию рабочий стол)")
 	flag.Parse()
 
 	if *id == "" {
 		*id = relaylink.NewID()
 	}
-	var confirm func() bool
-	if *pw == "" && !*noConfirm {
-		confirm = func() bool {
-			return hostagent.ConfirmDialog("NordDesk — входящее подключение",
-				"К этому компьютеру запрашивают удалённый доступ.\nКод введён верно.\n\nРазрешить управление?")
-		}
+	// С кодом доступ даётся сразу; без кода — спрашиваем (окно Windows).
+	confirm := func(sas string) bool {
+		return hostagent.ConfirmDialog("NordDesk — входящее подключение", hostagent.ConfirmText(sas))
 	}
 
 	var last hostagent.Status

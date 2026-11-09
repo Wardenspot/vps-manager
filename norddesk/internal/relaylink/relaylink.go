@@ -34,6 +34,38 @@ var (
 	ErrBusy   = errors.New("relaylink: к хосту уже подключены")
 )
 
+// Режим подключения — первый байт клиента после спаривания (до рукопожатия).
+//
+//	ModePassword — клиент ввёл код: доступ сразу, без подтверждения;
+//	ModeRequest  — только ID: на той стороне спросят «Разрешить?».
+//
+// Байт не защищён, но подмена ничего не даёт: P→R лишь вызовет окно
+// подтверждения (с проверочным номером), R→P — провал рукопожатия.
+const (
+	ModePassword byte = 'P'
+	ModeRequest  byte = 'R'
+)
+
+// SendMode отправляет режим подключения (клиент).
+func SendMode(conn net.Conn, mode byte) error {
+	_, err := conn.Write([]byte{mode})
+	return err
+}
+
+// ReadMode читает режим подключения (хост).
+func ReadMode(conn net.Conn, deadline time.Time) (byte, error) {
+	conn.SetReadDeadline(deadline)
+	defer conn.SetReadDeadline(time.Time{})
+	b := make([]byte, 1)
+	if _, err := io.ReadFull(conn, b); err != nil {
+		return 0, err
+	}
+	if b[0] != ModePassword && b[0] != ModeRequest {
+		return 0, fmt.Errorf("relaylink: неизвестный режим %q", b[0])
+	}
+	return b[0], nil
+}
+
 // NewID генерирует случайный 9-значный ID (как у готовых решений).
 func NewID() string {
 	var sb strings.Builder

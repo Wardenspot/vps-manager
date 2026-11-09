@@ -21,20 +21,25 @@ const (
 	TypeClipboard  Type = 3 // UTF-8 текст буфера обмена хоста
 	TypeCursorPos  Type = 4 // бинарно: x,y uint16 — позиция курсора на хосте
 	TypeSessionEnd Type = 5 // UTF-8 текст: причина завершения
+	TypeNotice     Type = 6 // UTF-8 текст: уведомление для показа клиенту
+	TypeHostInfo   Type = 7 // JSON: {pc,user,admin} — сведения о компьютере
+	TypeElevated   Type = 8 // UTF-8 текст: код для переподключения к хосту с правами администратора
 
 	// клиент → хост
 	TypeMouseMove  Type = 20 // бинарно: x,y uint16 (абсолютные координаты экрана хоста)
 	TypeMouseBtn   Type = 21 // бинарно: button uint8, down uint8
 	TypeMouseWheel Type = 22 // бинарно: deltaY int16
-	TypeKey        Type = 23 // бинарно: vk uint16, down uint8
+	TypeKey        Type = 23 // бинарно: vk uint16, down uint8 [, flags uint8: бит 0 — extended]
 	TypeSetClip    Type = 24 // UTF-8 текст: установить буфер обмена на хосте
 	TypeQuality    Type = 25 // бинарно: jpegQ uint8, fps uint8
-	TypeCombo      Type = 26 // UTF-8 текст: спец-комбинация, напр. "ctrl-alt-del"
+	TypeCombo      Type = 26 // UTF-8 текст: спец-комбинация, напр. "alt-tab"
+	TypeAction     Type = 27 // UTF-8 текст: действие из меню инструментов, напр. "cmd-admin"
 
-	// клиент → хост: передача файла на рабочий стол хоста
-	TypeFileStart Type = 40 // JSON: {name,size}
+	// клиент → хост: передача файлов
+	TypeFileStart Type = 40 // JSON: {name,size[,batch,rel,dir]} — без batch файл идёт на рабочий стол
 	TypeFileData  Type = 41 // бинарно: сырые байты очередного куска
 	TypeFileEnd   Type = 42 // пусто: файл завершён
+	TypePasteDone Type = 43 // JSON: {batch,items} — файлы пакета положить в буфер обмена и вставить (Ctrl+V)
 )
 
 // MaxPayload ограничивает размер одного сообщения, чтобы испорченная длина не

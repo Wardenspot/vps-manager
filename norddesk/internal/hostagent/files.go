@@ -2,6 +2,7 @@ package hostagent
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,6 +34,19 @@ func safeName(name string) string {
 	return name
 }
 
+// safeRel очищает относительный путь внутри пакета: каждый компонент — через
+// safeName, «..» и пустые части выбрасываются. Выйти за пределы пакета нельзя.
+func safeRel(rel string) string {
+	var clean []string
+	for _, p := range strings.Split(strings.ReplaceAll(rel, "\\", "/"), "/") {
+		if p == "" || p == "." || p == ".." {
+			continue
+		}
+		clean = append(clean, safeName(p))
+	}
+	return filepath.Join(clean...)
+}
+
 // uniquePath не даёт перезаписать существующий файл: «отчёт.docx» →
 // «отчёт (1).docx», «отчёт (2).docx» и т.д.
 func uniquePath(dir, name string) string {
@@ -49,6 +63,58 @@ func uniquePath(dir, name string) string {
 		}
 	}
 	return filepath.Join(dir, fmt.Sprintf("%s-%d%s", base, time.Now().UnixNano(), ext))
+}
+
+// moveTree переносит файл или папку. Если переименование невозможно (другой
+// диск, например рабочий стол в OneDrive на другом томе) — копирует и удаляет.
+func moveTree(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	if err := copyTree(src, dst); err != nil {
+		os.RemoveAll(dst)
+		return err
+	}
+	return os.RemoveAll(src)
+}
+
+func copyTree(src, dst string) error {
+	st, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+	if st.IsDir() {
+		if err := os.MkdirAll(dst, 0o755); err != nil {
+			return err
+		}
+		entries, err := os.ReadDir(src)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			if err := copyTree(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if !st.Mode().IsRegular() {
+		return nil // ссылки и прочее не переносим
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 // fallbackDesktop — папка Desktop в профиле, либо сам профиль.

@@ -36,6 +36,7 @@ import (
 	"crypto/subtle"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash"
 	"io"
 )
@@ -75,7 +76,13 @@ type Conn struct {
 	decAEAD cipher.AEAD
 	encCtr  uint64
 	decCtr  uint64
+	sas     string
 }
+
+// SAS — короткий проверочный номер сеанса (4 цифры). Он одинаков у обеих
+// сторон, только если между ними никто не вклинился. Его показывают на обоих
+// экранах в режиме «без кода», чтобы человек мог сверить.
+func (c *Conn) SAS() string { return c.sas }
 
 // hkdf — минимальная реализация HKDF-SHA256 на стандартной библиотеке.
 func hkdf(secret, salt, info []byte, n int) []byte {
@@ -158,6 +165,8 @@ func Handshake(rw io.ReadWriter, role Role, sessionID, password string) (*Conn, 
 	confirmKey := okm[keySize*2+nonceFix*2:]
 
 	c := &Conn{rw: rw}
+	sasBytes := hkdf(z, salt[:], []byte("norddesk-v1-sas"), 4)
+	c.sas = fmt.Sprintf("%04d", binary.BigEndian.Uint32(sasBytes)%10000)
 	if role == RoleHost {
 		c.encKey, c.decKey = hostKey, viewerKey
 		copy(c.encFix[:], hostFix)
