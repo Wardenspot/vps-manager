@@ -49,7 +49,7 @@ jobs:
     env:
       CGO_ENABLED: "0"
       # Адрес релея, зашиваемый в клиенты, чтобы скачавший подключался без -relay.
-      NDSK_RELAY: "143.246.193.103:8765"
+      NDSK_RELAY: "143.246.193.103:8766"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
