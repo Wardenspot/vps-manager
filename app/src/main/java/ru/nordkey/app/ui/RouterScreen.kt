@@ -95,8 +95,11 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                                            verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Groups, null, tint = NK.Family, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
-                    Text("Вы в семейном доступе" + (r.str("owner_name")?.let { " у $it" } ?: "") + ". Подписку оплачивает владелец.",
-                         color = NK.Text, fontSize = 13.sp)
+                    Column {
+                        Text("Вы в семейном доступе", color = NK.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text((r.str("owner_name")?.let { "Владелец: $it. " } ?: "") + "Подписку оплачивает владелец — вам платить не нужно.",
+                             color = NK.Muted, fontSize = 13.sp)
+                    }
                 }
                 else if (subDev > 1 || subMult != 1.0) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(NK.Surface2).padding(12.dp),
                                                            verticalAlignment = Alignment.CenterVertically) {
@@ -105,6 +108,32 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                     Text((if (staff) "В подписке владельца" else "В вашей подписке") + " $subDev ${plural(subDev, "устройство", "устройства", "устройств")}" +
                          (if (staff && subMult != 1.0) " · цена ×${multStr(subMult)}" else "") + " — продление сразу за все",
                          color = NK.Text, fontSize = 13.sp)
+                }
+                // семейный доступ
+                r.optJSONArray("access")?.objects()?.takeIf { it.isNotEmpty() }?.let { acc ->
+                    val members = acc.filter { !it.optBoolean("main") }
+                    val canShare = level == "owner" || (staff && me.can("routers.admin"))
+                    NkCard {
+                        CardHeader("Семейный доступ", Icons.Default.Groups, NK.Family, count = "${members.size} из 3")
+                        Text("Члены семьи видят роутер в боте и приложении, добавляют сайты и пишут в поддержку со своего Telegram. Бесплатно.",
+                             color = NK.Muted, fontSize = 13.sp)
+                        NkDivider()
+                        acc.forEach { a ->
+                            val main = a.optBoolean("main")
+                            PersonRow(a.str("name"), a.str("username"), a.optLong("tg_id"),
+                                      role = if (main) "main" else a.optString("level"),
+                                      onClick = if (staff) ({ nav.go(Scr.Account(a.optLong("tg_id"))) }) else null,
+                                      trailing = if (!main && canShare) ({
+                                          IconButton(onClick = { dialog = RDialog.RemoveAccess(a.optLong("tg_id"), a.optString("name")) }) {
+                                              Icon(Icons.Default.PersonRemove, "Убрать", tint = NK.Bad, modifier = Modifier.size(20.dp))
+                                          }
+                                      }) else null)
+                        }
+                        if (members.isEmpty()) Text("Пока никого. Пригласите — ссылка придёт в Telegram.", color = NK.Muted, fontSize = 13.sp)
+                        if (canShare && members.size < 3) OutlinedButton(onClick = { dialog = RDialog.Share }, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Пригласить члена семьи")
+                        }
+                    }
                 }
                 if (!r.optBoolean("migrated", true)) NkCard(bg = NK.WarnSoft, border = NK.WarnLine) {
                     Text("Роутер ещё на старом сервере — часть функций недоступна, пока его не перенесут.", color = NK.WarnText, fontSize = 14.sp)
@@ -211,33 +240,6 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                     }, modifier = Modifier.fillMaxWidth()) { Text("Персональная ссылка на бота для клиента") }
                 }
 
-                // семейный доступ
-                r.optJSONArray("access")?.objects()?.takeIf { it.isNotEmpty() }?.let { acc ->
-                    val members = acc.filter { !it.optBoolean("main") }
-                    val canShare = level == "owner" || (staff && me.can("routers.admin"))
-                    NkCard {
-                        CardHeader("Семейный доступ", Icons.Default.Groups, NK.Family, count = "${members.size} из 3")
-                        Text("Члены семьи видят роутер в боте и приложении, добавляют сайты и пишут в поддержку со своего Telegram. Бесплатно.",
-                             color = NK.Muted, fontSize = 13.sp)
-                        NkDivider()
-                        acc.forEach { a ->
-                            val main = a.optBoolean("main")
-                            PersonRow(a.str("name"), a.str("username"), a.optLong("tg_id"),
-                                      role = if (main) "main" else a.optString("level"),
-                                      note = if (main) "оплачивает подписку" else null,
-                                      onClick = if (staff) ({ nav.go(Scr.Account(a.optLong("tg_id"))) }) else null,
-                                      trailing = if (!main && canShare) ({
-                                          IconButton(onClick = { dialog = RDialog.RemoveAccess(a.optLong("tg_id"), a.optString("name")) }) {
-                                              Icon(Icons.Default.PersonRemove, "Убрать", tint = NK.Bad, modifier = Modifier.size(20.dp))
-                                          }
-                                      }) else null)
-                        }
-                        if (members.isEmpty()) Text("Пока никого. Пригласите — ссылка придёт в Telegram.", color = NK.Muted, fontSize = 13.sp)
-                        if (canShare && members.size < 3) OutlinedButton(onClick = { dialog = RDialog.Share }, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Пригласить члена семьи")
-                        }
-                    }
-                }
                 Spacer(Modifier.height(24.dp))
             }
         }

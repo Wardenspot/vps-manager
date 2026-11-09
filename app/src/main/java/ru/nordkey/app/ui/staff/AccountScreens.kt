@@ -95,7 +95,7 @@ fun AccountScreen(tg: Long, me: Me, nav: Nav) {
                             }
                             f.optJSONObject("owner")?.let { o ->
                                 NkDivider()
-                                PersonRow(o.str("name"), o.str("username"), o.optLong("tg_id"), "main", note = "оплачивает подписку",
+                                PersonRow(o.str("name"), o.str("username"), o.optLong("tg_id"), "main",
                                           onClick = { nav.go(Scr.Account(o.optLong("tg_id"))) })
                             }
                             if (isOwner) {
@@ -118,9 +118,9 @@ fun AccountScreen(tg: Long, me: Me, nav: Nav) {
                     SectionTitle("Роутеры")
                     routers.forEach { ip -> OutlinedButton(onClick = { nav.go(Scr.Router(ip)) }, Modifier.fillMaxWidth()) { Text("Роутер $ip") } }
                 }
-                val cfgs = a.optJSONArray("configs").objects()
+                val cfgs = a.optJSONArray("configs").objects().filter { family.isEmpty() || it.optString("kind") != "router" || it.optInt("active") != 1 }
                 if (cfgs.isNotEmpty()) {
-                    SectionTitle("Конфиги")
+                    SectionTitle("Конфиги устройств")
                     cfgs.forEach { c ->
                         NkCard {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -152,7 +152,7 @@ fun AccountScreen(tg: Long, me: Me, nav: Nav) {
                 }
                 a.optJSONArray("payments").objects().takeIf { it.isNotEmpty() }?.let { pays ->
                     SectionTitle("Платежи")
-                    NkCard { pays.forEach { p -> Text("${dateRu(p.str("created_at"))} · ${p.optInt("amount")} ₽ · ${p.optString("plan")} · ${p.optString("status")}", fontSize = 13.sp) } }
+                    NkCard { pays.forEach { p -> Text("${dateRu(p.str("created_at"))} · ${p.optInt("amount")} ₽ · ${planRu(p.optString("plan"))} · ${statusRu(p.optString("status"))}", fontSize = 13.sp) } }
                 }
                 Spacer(Modifier.height(16.dp))
             }
@@ -190,9 +190,9 @@ fun Bubble(m: JSONObject) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.Start else Alignment.End) {
         Text(when (sender) { "client" -> "Клиент"; "ai" -> "🤖 ИИ"; else -> "Сотрудник" } + " · " + hm(m.optLong("ts")),
              color = NK.Muted, fontSize = 11.sp)
-        Text(m.optString("text"), fontSize = 14.sp, color = if (mine) NK.Text else Color.White,
+        Text(m.optString("text"), fontSize = 14.sp, color = if (sender == "client" || sender == "ai") NK.Text else Color.White,
              modifier = Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(12.dp))
-                 .background(when (sender) { "client" -> NK.Bg; "ai" -> NK.AccentSoft; else -> NK.Accent }).padding(10.dp))
+                 .background(when (sender) { "client" -> NK.Surface2; "ai" -> NK.AccentSoft; else -> NK.Accent }).padding(10.dp))
     }
 }
 
@@ -221,3 +221,11 @@ fun SupportInboxScreen(nav: Nav) {
         }
     }
 }
+
+
+private fun planRu(p: String): String = Regex("""^p?(\d+)([dmy])$""").find(p)?.let { m ->
+    val n = m.groupValues[1]; (if (p.startsWith("p")) "⭐ " else "") + n + " " + when (m.groupValues[2]) { "d" -> "дн."; "m" -> "мес."; else -> "г." }
+} ?: p
+
+private fun statusRu(s: String): String = when (s) { "paid", "success", "succeeded", "confirmed" -> "оплачено"; "pending", "waiting" -> "ждёт оплаты"
+    "cancelled", "canceled", "expired" -> "отменён"; else -> s }

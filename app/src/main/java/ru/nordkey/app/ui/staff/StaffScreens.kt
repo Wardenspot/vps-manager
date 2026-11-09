@@ -2,6 +2,7 @@ package ru.nordkey.app.ui.staff
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -128,7 +129,7 @@ fun ClientsScreen(me: Me, nav: Nav) {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Имя, IP или @ник") },
                                   leadingIcon = { Icon(Icons.Default.Search, null) })
-                Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.padding(vertical = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     fun count(f: String) = all.count { c -> when (f) {
                         "problems" -> c.optBoolean("online") && (c.dbl("rtt") ?: 0.0) > 120 || c.optJSONObject("subscription")?.optBoolean("active") == false
                         "offline" -> !c.optBoolean("online") && c.optBoolean("migrated"); "old" -> !c.optBoolean("migrated"); else -> true } }
@@ -432,6 +433,7 @@ fun AssistantScreen(nav: Nav, withBar: Boolean) {
                     Text("Что умею", fontWeight = FontWeight.SemiBold)
                     Text("• найти клиента по @нику, имени или адресу\n• проверить и починить роутер, сайт, DNS\n" +
                          "• пустить сайт через VPN или напрямую\n• перенести или продлить подписку, написать клиенту — по кнопке\n" +
+                         "• выдать ещё устройство (конфиг), прислать конфиг заново, цена ×N\n• объединить в семейный доступ, переименовать роутер\n" +
                          "• сложное — передам в Автопилот с готовым запросом для Claude", color = NK.Muted, fontSize = 14.sp)
                 }
             }
