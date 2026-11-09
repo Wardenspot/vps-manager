@@ -88,6 +88,28 @@ func Read(r io.Reader) (Msg, error) {
 	return Msg{Type: Type(hdr[0]), Data: data}, nil
 }
 
+// Encode сериализует сообщение в байты — готовый открытый текст для
+// secure.Conn.WriteFrame.
+func Encode(t Type, data []byte) []byte {
+	out := make([]byte, 5+len(data))
+	out[0] = byte(t)
+	binary.BigEndian.PutUint32(out[1:], uint32(len(data)))
+	copy(out[5:], data)
+	return out
+}
+
+// Decode разбирает сообщение из байтов, полученных от secure.Conn.ReadFrame.
+func Decode(b []byte) (Msg, error) {
+	if len(b) < 5 {
+		return Msg{}, errors.New("wire: короткое сообщение")
+	}
+	n := binary.BigEndian.Uint32(b[1:])
+	if n > MaxPayload || int(n) != len(b)-5 {
+		return Msg{}, errors.New("wire: неверная длина сообщения")
+	}
+	return Msg{Type: Type(b[0]), Data: b[5:]}, nil
+}
+
 // --- вспомогательные упаковщики бинарных сообщений ---
 
 // Tile — прямоугольный кусок экрана в формате JPEG.

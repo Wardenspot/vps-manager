@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NordDesk</title>
+<link rel="stylesheet" href="/static/app.css">
+<!--BOOT-->
+</head>
+<body>
+  <!-- Главный экран -->
+  <div id="home" class="screen">
+    <div class="home">
+      <header class="top">
+        <span class="logo">NordDesk</span>
+        <span class="tag">удалённый доступ</span>
+      </header>
+
+      <div class="cards">
+        <!-- Это рабочее место -->
+        <section class="card" id="selfCard">
+          <h2>Это рабочее место</h2>
+          <p class="hint">Продиктуйте ID и код тому, кто будет подключаться к вам.</p>
+
+          <div id="selfBody">
+            <div class="field-label">Ваш ID</div>
+            <div class="big" id="selfId">··· ··· ···</div>
+
+            <div class="field-label">Код подключения</div>
+            <div class="row">
+              <div class="big code" id="selfCode">··· ···</div>
+              <button class="icon" id="newCodeBtn" title="Выдать новый код">↻</button>
+            </div>
+
+            <button class="ghost wide" id="copyBtn">Скопировать ID и код</button>
+
+            <div class="state" id="selfState">
+              <span class="dot"></span><span id="selfStateText">Подключение к серверу…</span>
+            </div>
+            <button class="danger wide hidden" id="endIncomingBtn">Завершить сеанс</button>
+          </div>
+          <p class="hint hidden" id="selfDisabled">Входящие подключения на этом устройстве недоступны.</p>
+        </section>
+
+        <!-- Подключиться к другому -->
+        <section class="card">
+          <h2>Подключиться к другому</h2>
+          <p class="hint">Введите ID и код с экрана другого компьютера.</p>
+
+          <label for="id">ID</label>
+          <input id="id" inputmode="numeric" autocomplete="off" placeholder="123 456 789">
+          <label for="code">Код</label>
+          <input id="code" inputmode="numeric" autocomplete="off" placeholder="6 цифр">
+          <button id="connectBtn" class="wide">Подключиться</button>
+          <div id="status" class="status" role="status"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- Сеанс -->
+  <div id="session" class="hidden">
+    <div id="toolbar">
+      <span class="brand">NordDesk</span>
+      <span id="peer" class="peer"></span>
+      <span class="spacer"></span>
+      <label class="q">Качество
+        <input id="quality" type="range" min="20" max="95" value="70">
+      </label>
+      <label class="q">Кадр/с
+        <input id="fps" type="range" min="1" max="30" value="12">
+      </label>
+      <button data-combo="alt-tab">Alt+Tab</button>
+      <button data-combo="win-d">Win+D</button>
+      <button data-combo="ctrl-alt-end" title="Аналог Ctrl+Alt+Del в удалённых сеансах">Ctrl+Alt+End</button>
+      <button id="clipBtn" title="Отправить свой буфер обмена на тот компьютер">Буфер →</button>
+      <button id="fsBtn" title="Полный экран">⛶</button>
+      <button id="discBtn" class="danger">Отключить</button>
+    </div>
+    <div id="stage">
+      <canvas id="screen" tabindex="0"></canvas>
+      <div id="drop">Отпустите файлы — они появятся на рабочем столе того компьютера</div>
+      <div id="toast" class="toast hidden"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

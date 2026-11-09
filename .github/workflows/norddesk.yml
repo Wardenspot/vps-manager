@@ -56,13 +56,15 @@ jobs:
         with:
           go-version: "1.24"
 
-      - name: Сборка клиента и хоста (Windows)
+      - name: Сборка приложения (Windows)
         env:
           GOOS: windows
           GOARCH: amd64
         run: |
-          go build -ldflags "-s -w -H=windowsgui -X main.defaultRelay=${NDSK_RELAY}" -o ../out/NordDesk.exe ./cmd/viewer
-          go build -ldflags "-s -w -X main.defaultRelay=${NDSK_RELAY}" -o ../out/NordDesk-Host.exe ./cmd/host
+          # Одно приложение для всех: принимает подключения и подключается к другим.
+          go build -ldflags "-s -w -H=windowsgui -X main.defaultRelay=${NDSK_RELAY}" -o ../out/NordDesk.exe ./cmd/norddesk
+          # Консольный хост без окна (для серверов) — собираем для проверки, не публикуем.
+          go build -ldflags "-s -w -X main.defaultRelay=${NDSK_RELAY}" -o ../build-check/NordDesk-Host.exe ./cmd/host
 
       - name: Сборка релея (Linux)
         env:
