@@ -42,6 +42,8 @@ private object PinnedTrust : X509TrustManager {
 object Api {
     @Volatile var token: String? = null
     var onUnauthorized: (() -> Unit)? = null
+    /** Только для снимков экранов в тестах: ответы без сервера. В приложении всегда null. */
+    @Volatile var fake: ((method: String, path: String, body: JSONObject?) -> JSONObject)? = null
 
     private val client: OkHttpClient by lazy {
         val ssl = SSLContext.getInstance("TLS").apply { init(null, arrayOf<TrustManager>(PinnedTrust), null) }
@@ -63,6 +65,7 @@ object Api {
     }
 
     suspend fun call(method: String, path: String, body: JSONObject? = null): JSONObject = withContext(Dispatchers.IO) {
+        fake?.let { f -> return@withContext f(method, path, body) }
         val resp = try {
             client.newCall(request(method, path, body)).execute()
         } catch (e: javax.net.ssl.SSLException) {

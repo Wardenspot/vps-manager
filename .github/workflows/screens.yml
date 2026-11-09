@@ -1,0 +1,44 @@
+name: Снимки экранов
+
+on:
+  push:
+    branches-ignore: [main]
+    paths: ["app/**", ".github/workflows/screens.yml", "build.gradle.kts"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  screens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Сборка (проверка, что компилируется)
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Снимки экранов (Paparazzi)
+        run: gradle --no-daemon :app:recordPaparazziDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screens
+          path: |
+            app/src/test/snapshots/images/
+            app/build/reports/tests/
+      - name: Снимки — в ветку screens-out (чтобы смотреть без скачивания артефактов)
+        if: always()
+        run: |
+          set -e
+          mkdir -p /tmp/out && cp -r app/src/test/snapshots/images/. /tmp/out/ 2>/dev/null || true
+          cp -r app/build/reports/tests /tmp/out/reports 2>/dev/null || true
+          cd /tmp/out && git init -q && git checkout -q -b screens-out
+          git -c user.name=ci -c user.email=ci@nordkey add -A && git -c user.name=ci -c user.email=ci@nordkey commit -qm "снимки ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" screens-out

@@ -1,6 +1,7 @@
 package ru.nordkey.app.ui.staff
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -8,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -59,8 +61,12 @@ fun AccountScreen(tg: Long, me: Me, nav: Nav) {
                     if (s?.optBoolean("trial") == true) Text("пробный период", color = NK.Muted, fontSize = 12.sp)
                     val dev = s?.optInt("devices", 0) ?: 0
                     val mult = s?.optDouble("price_mult", 1.0) ?: 1.0
-                    if (dev > 0 || mult != 1.0) Text("Устройств в подписке: $dev" + (if (mult != 1.0) " · цена ×${multStr(mult)}" else ""),
-                                                     color = NK.Text, fontSize = 14.sp)
+                    if (dev > 0 || mult != 1.0) Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Devices, null, tint = NK.Muted, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("$dev ${plural(dev, "устройство", "устройства", "устройств")} в подписке" + (if (mult != 1.0) " · цена ×${multStr(mult)}" else ""),
+                             color = NK.Text, fontSize = 14.sp)
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (me.can("subs.edit")) Button(onClick = { dialog = "extend" }, Modifier.weight(1f)) { Text("Продлить") }
                         if (me.can("subs.edit")) OutlinedButton(onClick = { dialog = "transfer" }, Modifier.weight(1f)) { Text("Перенести") }
@@ -68,31 +74,43 @@ fun AccountScreen(tg: Long, me: Me, nav: Nav) {
                 }
                 val routers = a.optJSONArray("routers")?.let { r -> (0 until r.length()).map { r.getString(it) } }.orEmpty()
                 val family = a.optJSONArray("family").objects()
-                fun who(p: JSONObject) = p.str("name") ?: p.str("username")?.let { "@$it" } ?: "ID ${p.optLong("tg_id")}"
                 if (family.isNotEmpty()) {
-                    SectionTitle("Роутеры и семейный доступ")
+                    SectionTitle(if (family.size > 1) "Роутеры · ${family.size}" else "Роутер")
                     family.forEach { f ->
-                        NkCard(onClick = { nav.go(Scr.Router(f.optString("ip"))) }) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Router, null, tint = NK.Muted)
-                                Spacer(Modifier.width(10.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(f.optString("name"), fontWeight = FontWeight.SemiBold)
-                                    Text(f.optString("ip") + " · " + when {
-                                        f.has("members") -> "владелец"
-                                        f.optString("level") == "owner" -> "полный доступ"
-                                        else -> "член семьи"
-                                    }, color = NK.Muted, fontSize = 12.sp)
+                        val ip = f.optString("ip")
+                        val isOwner = f.has("members")
+                        NkCard {
+                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { nav.go(Scr.Router(ip)) },
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(NK.AccentSoft), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Router, null, tint = NK.Link)
                                 }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(f.optString("name"), fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1)
+                                    Mono(ip)
+                                }
+                                RoleChip(if (isOwner) "main" else f.optString("level"))
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = NK.Off)
                             }
                             f.optJSONObject("owner")?.let { o ->
-                                TextButton(onClick = { nav.go(Scr.Account(o.optLong("tg_id"))) }) { Text("Владелец: ${who(o)}") }
+                                NkDivider()
+                                PersonRow(o.str("name"), o.str("username"), o.optLong("tg_id"), "main",
+                                          onClick = { nav.go(Scr.Account(o.optLong("tg_id"))) })
                             }
-                            val mem = f.optJSONArray("members").objects()
-                            if (f.has("members")) {
-                                if (mem.isEmpty()) Text("Членов семьи нет", color = NK.Muted, fontSize = 12.sp)
-                                else Text("👨‍👩‍👧 Члены семьи: ${mem.size}", color = NK.Muted, fontSize = 12.sp)
-                                mem.forEach { m -> TextButton(onClick = { nav.go(Scr.Account(m.optLong("tg_id"))) }) { Text(who(m)) } }
+                            if (isOwner) {
+                                val mem = f.optJSONArray("members").objects()
+                                NkDivider()
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Groups, null, tint = NK.Family, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(if (mem.isEmpty()) "Семейный доступ: никого" else "Семейный доступ · ${mem.size} из 3",
+                                         color = NK.Muted, fontSize = 13.sp)
+                                }
+                                mem.forEach { m ->
+                                    PersonRow(m.str("name"), m.str("username"), m.optLong("tg_id"), m.optString("level"),
+                                              onClick = { nav.go(Scr.Account(m.optLong("tg_id"))) })
+                                }
                             }
                         }
                     }
@@ -100,9 +118,9 @@ fun AccountScreen(tg: Long, me: Me, nav: Nav) {
                     SectionTitle("Роутеры")
                     routers.forEach { ip -> OutlinedButton(onClick = { nav.go(Scr.Router(ip)) }, Modifier.fillMaxWidth()) { Text("Роутер $ip") } }
                 }
-                val cfgs = a.optJSONArray("configs").objects()
+                val cfgs = a.optJSONArray("configs").objects().filter { family.isEmpty() || it.optString("kind") != "router" || it.optInt("active") != 1 }
                 if (cfgs.isNotEmpty()) {
-                    SectionTitle("Конфиги")
+                    SectionTitle("Конфиги устройств")
                     cfgs.forEach { c ->
                         NkCard {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -134,7 +152,7 @@ fun AccountScreen(tg: Long, me: Me, nav: Nav) {
                 }
                 a.optJSONArray("payments").objects().takeIf { it.isNotEmpty() }?.let { pays ->
                     SectionTitle("Платежи")
-                    NkCard { pays.forEach { p -> Text("${dateRu(p.str("created_at"))} · ${p.optInt("amount")} ₽ · ${p.optString("plan")} · ${p.optString("status")}", fontSize = 13.sp) } }
+                    NkCard { pays.forEach { p -> Text("${dateRu(p.str("created_at"))} · ${p.optInt("amount")} ₽ · ${planRu(p.optString("plan"))} · ${statusRu(p.optString("status"))}", fontSize = 13.sp) } }
                 }
                 Spacer(Modifier.height(16.dp))
             }
@@ -172,9 +190,9 @@ fun Bubble(m: JSONObject) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.Start else Alignment.End) {
         Text(when (sender) { "client" -> "Клиент"; "ai" -> "🤖 ИИ"; else -> "Сотрудник" } + " · " + hm(m.optLong("ts")),
              color = NK.Muted, fontSize = 11.sp)
-        Text(m.optString("text"), fontSize = 14.sp, color = if (mine) NK.Text else Color.White,
+        Text(m.optString("text"), fontSize = 14.sp, color = if (sender == "client" || sender == "ai") NK.Text else Color.White,
              modifier = Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(12.dp))
-                 .background(when (sender) { "client" -> NK.Bg; "ai" -> NK.AccentSoft; else -> NK.Accent }).padding(10.dp))
+                 .background(when (sender) { "client" -> NK.Surface2; "ai" -> NK.AccentSoft; else -> NK.Accent }).padding(10.dp))
     }
 }
 
@@ -203,3 +221,11 @@ fun SupportInboxScreen(nav: Nav) {
         }
     }
 }
+
+
+private fun planRu(p: String): String = Regex("""^p?(\d+)([dmy])$""").find(p)?.let { m ->
+    val n = m.groupValues[1]; (if (p.startsWith("p")) "⭐ " else "") + n + " " + when (m.groupValues[2]) { "d" -> "дн."; "m" -> "мес."; else -> "г." }
+} ?: p
+
+private fun statusRu(s: String): String = when (s) { "paid", "success", "succeeded", "confirmed" -> "оплачено"; "pending", "waiting" -> "ждёт оплаты"
+    "cancelled", "canceled", "expired" -> "отменён"; else -> s }

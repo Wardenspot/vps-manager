@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("app.cash.paparazzi")
 }
 
 val versionCodeEnv = (System.getenv("NK_VERSION_CODE") ?: "1").toInt()
@@ -15,7 +16,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = versionCodeEnv
-        versionName = "1.0.$versionCodeEnv"
+        versionName = System.getenv("NK_VERSION_NAME") ?: "1.1.$versionCodeEnv"
     }
 
     signingConfigs {
@@ -51,6 +52,7 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     val bom = platform("androidx.compose:compose-bom:2024.09.02")
     implementation(bom)
     implementation("androidx.compose.ui:ui")

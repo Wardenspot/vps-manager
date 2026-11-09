@@ -1,7 +1,9 @@
 package ru.nordkey.app.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -13,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -88,11 +91,50 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                 }
                 val subDev = sub?.optInt("devices", 0) ?: 0
                 val subMult = sub?.optDouble("price_mult", 1.0) ?: 1.0
-                if (level == "member") Text("👨‍👩‍👧 Вы — член семьи" + (r.str("owner_name")?.let { ", владелец роутера: $it" } ?: "") + ". Подписку оплачивает владелец.",
-                                            color = NK.Link, fontSize = 13.sp)
-                else if (subDev > 1 || subMult != 1.0) Text((if (staff) "Подписка владельца" else "Ваша подписка") + ": устройств $subDev" +
-                                                             (if (staff && subMult != 1.0) " · цена ×${multStr(subMult)}" else "") + " — продление сразу за все",
-                                                             color = NK.Muted, fontSize = 13.sp)
+                if (level == "member") Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(NK.FamilySoft).padding(12.dp),
+                                           verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Groups, null, tint = NK.Family, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text("Вы в семейном доступе", color = NK.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text((r.str("owner_name")?.let { "Владелец: $it. " } ?: "") + "Подписку оплачивает владелец — вам платить не нужно.",
+                             color = NK.Muted, fontSize = 13.sp)
+                    }
+                }
+                else if (subDev > 1 || subMult != 1.0) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(NK.Surface2).padding(12.dp),
+                                                           verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Devices, null, tint = NK.Muted, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text((if (staff) "В подписке владельца" else "В вашей подписке") + " $subDev ${plural(subDev, "устройство", "устройства", "устройств")}" +
+                         (if (staff && subMult != 1.0) " · цена ×${multStr(subMult)}" else "") + " — продление сразу за все",
+                         color = NK.Text, fontSize = 13.sp)
+                }
+                // семейный доступ
+                r.optJSONArray("access")?.objects()?.takeIf { it.isNotEmpty() }?.let { acc ->
+                    val members = acc.filter { !it.optBoolean("main") }
+                    val canShare = level == "owner" || (staff && me.can("routers.admin"))
+                    NkCard {
+                        CardHeader("Семейный доступ", Icons.Default.Groups, NK.Family, count = "${members.size} из 3")
+                        Text("Члены семьи видят роутер в боте и приложении, добавляют сайты и пишут в поддержку со своего Telegram. Бесплатно.",
+                             color = NK.Muted, fontSize = 13.sp)
+                        NkDivider()
+                        acc.forEach { a ->
+                            val main = a.optBoolean("main")
+                            PersonRow(a.str("name"), a.str("username"), a.optLong("tg_id"),
+                                      role = if (main) "main" else a.optString("level"),
+                                      onClick = if (staff) ({ nav.go(Scr.Account(a.optLong("tg_id"))) }) else null,
+                                      trailing = if (!main && canShare) ({
+                                          IconButton(onClick = { dialog = RDialog.RemoveAccess(a.optLong("tg_id"), a.optString("name")) }) {
+                                              Icon(Icons.Default.PersonRemove, "Убрать", tint = NK.Bad, modifier = Modifier.size(20.dp))
+                                          }
+                                      }) else null)
+                        }
+                        if (members.isEmpty()) Text("Пока никого. Пригласите — ссылка придёт в Telegram.", color = NK.Muted, fontSize = 13.sp)
+                        if (canShare && members.size < 3) OutlinedButton(onClick = { dialog = RDialog.Share }, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Пригласить члена семьи")
+                        }
+                    }
+                }
                 if (!r.optBoolean("migrated", true)) NkCard(bg = NK.WarnSoft, border = NK.WarnLine) {
                     Text("Роутер ещё на старом сервере — часть функций недоступна, пока его не перенесут.", color = NK.WarnText, fontSize = 14.sp)
                 }
@@ -141,7 +183,7 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                         act { val x = Api.post("/v1/routers/$ip/fix"); dialog = RDialog.Job(x.getString("job"), "Починка роутера"); null }
                     }
                     if (level == "owner" || (staff && me.can("routers.admin")))
-                        ActionTile("Поделиться", Icons.Default.GroupAdd, Modifier.weight(1f)) { dialog = RDialog.Share }
+                        ActionTile("Семейный доступ", Icons.Default.Groups, Modifier.weight(1f)) { dialog = RDialog.Share }
                     else Spacer(Modifier.weight(1f))
                 }
 
@@ -198,31 +240,6 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                     }, modifier = Modifier.fillMaxWidth()) { Text("Персональная ссылка на бота для клиента") }
                 }
 
-                // кто имеет доступ
-                r.optJSONArray("access")?.objects()?.takeIf { it.isNotEmpty() }?.let { acc ->
-                    val members = acc.count { !it.optBoolean("main") }
-                    SectionTitle("Семейный доступ" + if (members > 0) " · $members" else "")
-                    NkCard {
-                        if (members == 0) Text("Членов семьи пока нет. Пригласить: бот → «🛜 Мой роутер» → «👨‍👩‍👧 Семейный доступ».",
-                                               color = NK.Muted, fontSize = 13.sp)
-                        acc.forEach { a ->
-                            Row(verticalAlignment = Alignment.CenterVertically,
-                                modifier = if (staff) Modifier.clickable { nav.go(Scr.Account(a.optLong("tg_id"))) } else Modifier) {
-                                Icon(if (a.optString("level") == "owner") Icons.Default.Person else Icons.Default.PersonOutline, null, tint = NK.Muted)
-                                Spacer(Modifier.width(10.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(a.str("name") ?: a.str("username")?.let { "@$it" } ?: "ID ${a.optLong("tg_id")}")
-                                    Text(when { a.optBoolean("main") -> "владелец · оплачивает подписку"; a.optString("level") == "owner" -> "полный доступ"; else -> "член семьи" } +
-                                             (if (a.str("name") != null) a.str("username")?.let { " · @$it" } ?: "" else ""),
-                                         color = NK.Muted, fontSize = 12.sp)
-                                }
-                                if (!a.optBoolean("main")) TextButton(onClick = { dialog = RDialog.RemoveAccess(a.optLong("tg_id"), a.optString("name")) }) {
-                                    Text("Убрать", color = NK.Bad)
-                                }
-                            }
-                        }
-                    }
-                }
                 Spacer(Modifier.height(24.dp))
             }
         }
@@ -266,12 +283,13 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
         }
         RDialog.Share -> AlertDialog(
             onDismissRequest = { dialog = null }, containerColor = NK.Surface,
-            title = { Text("Поделиться роутером") },
-            text = { Text("Для кого код? Он действует ${if (load.data?.optString("level") == "staff") "сутки" else "10 минут"} и срабатывает один раз.", color = NK.Muted) },
+            title = { Text("Пригласить в семейный доступ") },
+            text = { Text("Отправьте приглашение человеку — он откроет ссылку в своём Telegram. Срабатывает один раз, действует " +
+                          "${if (load.data?.optString("level") == "staff") "сутки" else "10 минут"}.", color = NK.Muted) },
             confirmButton = {
-                Column {
-                    TextButton(onClick = { act { dialog = RDialog.Code(Api.post("/v1/routers/$ip/share", "level" to "owner")); null } }) { Text("Свой второй аккаунт / полный доступ") }
-                    TextButton(onClick = { act { dialog = RDialog.Code(Api.post("/v1/routers/$ip/share", "level" to "member")); null } }) { Text("Член семьи / участник") }
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = { act { dialog = RDialog.Code(Api.post("/v1/routers/$ip/share", "level" to "member")); null } }) { Text("Член семьи") }
+                    TextButton(onClick = { act { dialog = RDialog.Code(Api.post("/v1/routers/$ip/share", "level" to "owner")); null } }) { Text("Полный доступ (свой второй аккаунт)") }
                     TextButton(onClick = { dialog = null }) { Text("Отмена") }
                 }
             },
@@ -362,7 +380,7 @@ fun PingChart(data: JSONObject?) {
         pts.forEachIndexed { i, v ->
             val h = if (v == null) 3f else (v / max * size.height).toFloat().coerceAtLeast(3f)
             drawRoundRect(
-                color = when { v == null -> NK.Off; v > 120 -> NK.Warn; else -> androidx.compose.ui.graphics.Color(0xFF3B6FD4) },
+                color = when { v == null -> NK.Off; v > 120 -> NK.Warn; else -> NK.Accent },
                 topLeft = Offset(i * w + w * 0.15f, size.height - h), size = Size(w * 0.7f, h), cornerRadius = CornerRadius(3f, 3f),
             )
         }
