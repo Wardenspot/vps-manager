@@ -20,7 +20,7 @@ import ru.nordkey.app.ui.staff.ClientsScreen
 /** Снимки экранов на выдуманных данных (сервер не нужен): светлая и тёмная тема. */
 class ScreensTest {
     @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_5.copy(screenHeight = 4200), maxPercentDifference = 1.0)
+    val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_5.copy(screenHeight = 4200), maxPercentDifference = 1.0, useDeviceResolution = true)
 
     private val staffPerms = listOf("clients.view", "routers.view", "routers.act", "routers.admin", "subs.view", "subs.edit", "msg", "ai",
                                     "newclient", "bat", "broadcast", "users.view", "audit.view", "server.view")
