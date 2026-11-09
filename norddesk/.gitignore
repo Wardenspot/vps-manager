@@ -1,0 +1,11 @@
+/out/
+*.exe
+norddesk-relay
+# бинарники локальной сборки (go build ./cmd/<name> кладёт их сюда)
+/host
+/relay
+/viewer
+/nd-relay
+/nd-viewer
+/norddesk
+/build-check/

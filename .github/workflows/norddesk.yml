@@ -1,0 +1,87 @@
+name: NordDesk (удалённый доступ)
+
+on:
+  push:
+    paths:
+      - "norddesk/**"
+      - ".github/workflows/norddesk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: norddesk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Проверка форматирования
+        run: test -z "$(gofmt -l .)" || (echo "нужен gofmt:"; gofmt -l .; exit 1)
+
+      - name: Тесты
+        run: go test -count=1 ./...
+
+      - name: Vet (Linux)
+        run: go vet -unsafeptr=false ./...
+
+      - name: Vet (Windows-цель)
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: "0"
+        run: go vet -unsafeptr=false ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: norddesk
+    env:
+      CGO_ENABLED: "0"
+      # Адрес релея, зашиваемый в клиенты, чтобы скачавший подключался без -relay.
+      NDSK_RELAY: "143.246.193.103:8766"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Сборка приложения (Windows)
+        env:
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          # Одно приложение для всех: принимает подключения и подключается к другим.
+          go build -ldflags "-s -w -H=windowsgui -X main.defaultRelay=${NDSK_RELAY}" -o ../out/NordDesk.exe ./cmd/norddesk
+          # Консольный хост без окна (для серверов) — собираем для проверки, не публикуем.
+          go build -ldflags "-s -w -X main.defaultRelay=${NDSK_RELAY}" -o ../build-check/NordDesk-Host.exe ./cmd/host
+
+      - name: Сборка релея (Linux)
+        env:
+          GOOS: linux
+          GOARCH: amd64
+        run: go build -ldflags "-s -w" -o ../out/norddesk-relay ./cmd/relay
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: norddesk
+          path: out/*
+
+      - name: Выпуск (ссылки для скачивания)
+        if: github.ref == 'refs/heads/norddesk'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: norddesk-latest
+          name: NordDesk (preview)
+          prerelease: true
+          files: out/*

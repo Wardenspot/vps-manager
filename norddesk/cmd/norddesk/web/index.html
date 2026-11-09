@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NordDesk</title>
+<link rel="stylesheet" href="/static/app.css">
+<!--BOOT-->
+</head>
+<body>
+  <!-- Главный экран -->
+  <div id="home" class="screen">
+    <div class="home">
+      <header class="top">
+        <span class="logo">NordDesk</span>
+        <span class="tag">удалённый доступ</span>
+      </header>
+
+      <div class="cards">
+        <!-- Это рабочее место -->
+        <section class="card" id="selfCard">
+          <h2>Это рабочее место <span class="badge hidden" id="adminBadge">администратор</span></h2>
+          <p class="hint">Продиктуйте ID и код тому, кто будет подключаться. С кодом он подключится сразу, без кода — вы увидите запрос.</p>
+
+          <div id="selfBody">
+            <div class="field-label">Ваш ID</div>
+            <div class="big" id="selfId">··· ··· ···</div>
+
+            <div class="field-label">Код подключения</div>
+            <div class="row">
+              <div class="big code" id="selfCode">··· ···</div>
+              <button class="icon" id="newCodeBtn" title="Выдать новый код">↻</button>
+            </div>
+
+            <button class="ghost wide" id="copyBtn">Скопировать ID и код</button>
+
+            <p class="warn-line hidden" id="selfFailed"></p>
+            <div class="state" id="selfState">
+              <span class="dot"></span><span id="selfStateText">Подключение к серверу…</span>
+            </div>
+            <button class="danger wide hidden" id="endIncomingBtn">Завершить сеанс</button>
+          </div>
+          <p class="hint hidden" id="selfDisabled">Входящие подключения на этом устройстве недоступны.</p>
+        </section>
+
+        <!-- Подключиться к другому -->
+        <section class="card">
+          <h2>Подключиться к другому</h2>
+          <p class="hint">Введите ID с экрана другого компьютера.</p>
+
+          <label for="id">ID</label>
+          <input id="id" inputmode="numeric" autocomplete="off" placeholder="123 456 789">
+          <label for="code">Код <span class="opt">— необязательно</span></label>
+          <input id="code" inputmode="numeric" autocomplete="off" placeholder="есть код — сразу, нет — по запросу">
+          <button id="connectBtn" class="wide">Подключиться</button>
+          <div id="status" class="status" role="status"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- Сеанс -->
+  <div id="session" class="hidden">
+    <div id="toolbar">
+      <span class="brand">NordDesk</span>
+      <span id="peer" class="peer"></span>
+      <span class="spacer"></span>
+
+      <div class="menu">
+        <button id="toolsBtn">Инструменты ▾</button>
+        <div class="menu-list hidden" id="toolsMenu">
+          <button data-action="cmd-admin">Командная строка (администратор)</button>
+          <button data-action="ps-admin">PowerShell (администратор)</button>
+          <button data-action="taskmgr">Диспетчер задач</button>
+          <button data-action="run">Выполнить… (Win+R)</button>
+          <button data-action="explorer">Проводник</button>
+          <hr>
+          <button data-action="services">Службы</button>
+          <button data-action="devmgmt">Диспетчер устройств</button>
+          <button data-action="eventvwr">Просмотр событий</button>
+          <button data-action="netconn">Сетевые подключения</button>
+          <button data-action="appwiz">Программы и компоненты</button>
+          <button data-action="control">Панель управления</button>
+          <button data-action="settings">Параметры Windows</button>
+          <button data-action="sysinfo">Сведения о системе</button>
+          <hr>
+          <button data-action="elevate" class="accent">Права администратора для NordDesk</button>
+        </div>
+      </div>
+      <button id="filesBtn" title="Выбрать файлы — они появятся на рабочем столе того компьютера">Файлы…</button>
+      <input type="file" id="filePicker" multiple hidden>
+      <label class="q toggle" title="Win, Alt+Tab, Ctrl+W, Alt+F4 и т.п. отправляются туда (Ctrl+Alt+Del и Win+L система не отдаёт)">
+        <input type="checkbox" id="syskeys" checked> Системные клавиши
+      </label>
+      <label class="q">Качество
+        <input id="quality" type="range" min="20" max="95" value="70">
+      </label>
+      <label class="q">Кадр/с
+        <input id="fps" type="range" min="1" max="30" value="12">
+      </label>
+      <button id="fsBtn" title="Полный экран">⛶</button>
+      <button id="discBtn" class="danger">Отключить</button>
+    </div>
+    <div id="stage">
+      <canvas id="screen" tabindex="0"></canvas>
+      <div id="toast" class="toast hidden"></div>
+    </div>
+  </div>
+
+  <div id="drop">Отпустите — файлы и папки появятся на рабочем столе того компьютера</div>
+  <div id="overlay" class="overlay hidden"><div id="overlayText"></div></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
