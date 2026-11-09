@@ -57,13 +57,46 @@ fun AccountScreen(tg: Long, me: Me, nav: Nav) {
                     Text(if (active) "Подписка до ${dateRu(s?.str("expires_at"))}" else if (s != null) "Подписка закончилась ${dateRu(s.str("expires_at"))}" else "Подписки нет",
                          fontWeight = FontWeight.Bold, color = if (active) NK.OkText else NK.WarnText)
                     if (s?.optBoolean("trial") == true) Text("пробный период", color = NK.Muted, fontSize = 12.sp)
+                    val dev = s?.optInt("devices", 0) ?: 0
+                    val mult = s?.optDouble("price_mult", 1.0) ?: 1.0
+                    if (dev > 0 || mult != 1.0) Text("Устройств в подписке: $dev" + (if (mult != 1.0) " · цена ×${multStr(mult)}" else ""),
+                                                     color = NK.Text, fontSize = 14.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (me.can("subs.edit")) Button(onClick = { dialog = "extend" }, Modifier.weight(1f)) { Text("Продлить") }
                         if (me.can("subs.edit")) OutlinedButton(onClick = { dialog = "transfer" }, Modifier.weight(1f)) { Text("Перенести") }
                     }
                 }
                 val routers = a.optJSONArray("routers")?.let { r -> (0 until r.length()).map { r.getString(it) } }.orEmpty()
-                if (routers.isNotEmpty()) {
+                val family = a.optJSONArray("family").objects()
+                fun who(p: JSONObject) = p.str("name") ?: p.str("username")?.let { "@$it" } ?: "ID ${p.optLong("tg_id")}"
+                if (family.isNotEmpty()) {
+                    SectionTitle("Роутеры и семейный доступ")
+                    family.forEach { f ->
+                        NkCard(onClick = { nav.go(Scr.Router(f.optString("ip"))) }) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Router, null, tint = NK.Muted)
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(f.optString("name"), fontWeight = FontWeight.SemiBold)
+                                    Text(f.optString("ip") + " · " + when {
+                                        f.has("members") -> "владелец"
+                                        f.optString("level") == "owner" -> "полный доступ"
+                                        else -> "член семьи"
+                                    }, color = NK.Muted, fontSize = 12.sp)
+                                }
+                            }
+                            f.optJSONObject("owner")?.let { o ->
+                                TextButton(onClick = { nav.go(Scr.Account(o.optLong("tg_id"))) }) { Text("Владелец: ${who(o)}") }
+                            }
+                            val mem = f.optJSONArray("members").objects()
+                            if (f.has("members")) {
+                                if (mem.isEmpty()) Text("Членов семьи нет", color = NK.Muted, fontSize = 12.sp)
+                                else Text("👨‍👩‍👧 Члены семьи: ${mem.size}", color = NK.Muted, fontSize = 12.sp)
+                                mem.forEach { m -> TextButton(onClick = { nav.go(Scr.Account(m.optLong("tg_id"))) }) { Text(who(m)) } }
+                            }
+                        }
+                    }
+                } else if (routers.isNotEmpty()) {
                     SectionTitle("Роутеры")
                     routers.forEach { ip -> OutlinedButton(onClick = { nav.go(Scr.Router(ip)) }, Modifier.fillMaxWidth()) { Text("Роутер $ip") } }
                 }

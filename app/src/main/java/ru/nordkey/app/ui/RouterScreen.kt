@@ -1,6 +1,7 @@
 package ru.nordkey.app.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -85,6 +86,13 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                     Tile("Подписка", sub?.let { if (it.optBoolean("active")) dateRu(it.str("expires_at")).take(5) else "нет" } ?: "—",
                          Modifier.weight(1f), warn = sub != null && !sub.optBoolean("active"))
                 }
+                val subDev = sub?.optInt("devices", 0) ?: 0
+                val subMult = sub?.optDouble("price_mult", 1.0) ?: 1.0
+                if (level == "member") Text("👨‍👩‍👧 Вы — член семьи" + (r.str("owner_name")?.let { ", владелец роутера: $it" } ?: "") + ". Подписку оплачивает владелец.",
+                                            color = NK.Link, fontSize = 13.sp)
+                else if (subDev > 1 || subMult != 1.0) Text((if (staff) "Подписка владельца" else "Ваша подписка") + ": устройств $subDev" +
+                                                             (if (staff && subMult != 1.0) " · цена ×${multStr(subMult)}" else "") + " — продление сразу за все",
+                                                             color = NK.Muted, fontSize = 13.sp)
                 if (!r.optBoolean("migrated", true)) NkCard(bg = NK.WarnSoft, border = NK.WarnLine) {
                     Text("Роутер ещё на старом сервере — часть функций недоступна, пока его не перенесут.", color = NK.WarnText, fontSize = 14.sp)
                 }
@@ -192,15 +200,20 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
 
                 // кто имеет доступ
                 r.optJSONArray("access")?.objects()?.takeIf { it.isNotEmpty() }?.let { acc ->
-                    SectionTitle("Доступ к роутеру")
+                    val members = acc.count { !it.optBoolean("main") }
+                    SectionTitle("Семейный доступ" + if (members > 0) " · $members" else "")
                     NkCard {
+                        if (members == 0) Text("Членов семьи пока нет. Пригласить: бот → «🛜 Мой роутер» → «👨‍👩‍👧 Семейный доступ».",
+                                               color = NK.Muted, fontSize = 13.sp)
                         acc.forEach { a ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(verticalAlignment = Alignment.CenterVertically,
+                                modifier = if (staff) Modifier.clickable { nav.go(Scr.Account(a.optLong("tg_id"))) } else Modifier) {
                                 Icon(if (a.optString("level") == "owner") Icons.Default.Person else Icons.Default.PersonOutline, null, tint = NK.Muted)
                                 Spacer(Modifier.width(10.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(a.str("name") ?: a.str("username")?.let { "@$it" } ?: "ID ${a.optLong("tg_id")}")
-                                    Text(when { a.optBoolean("main") -> "основной владелец"; a.optString("level") == "owner" -> "полный доступ"; else -> "участник" },
+                                    Text(when { a.optBoolean("main") -> "владелец · оплачивает подписку"; a.optString("level") == "owner" -> "полный доступ"; else -> "член семьи" } +
+                                             (if (a.str("name") != null) a.str("username")?.let { " · @$it" } ?: "" else ""),
                                          color = NK.Muted, fontSize = 12.sp)
                                 }
                                 if (!a.optBoolean("main")) TextButton(onClick = { dialog = RDialog.RemoveAccess(a.optLong("tg_id"), a.optString("name")) }) {

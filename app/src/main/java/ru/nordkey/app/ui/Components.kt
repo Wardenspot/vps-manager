@@ -235,3 +235,6 @@ fun dateRu(iso: String?): String {
     if (iso.isNullOrBlank() || iso.length < 10) return "—"
     return "${iso.substring(8, 10)}.${iso.substring(5, 7)}.${iso.substring(0, 4)}"
 }
+
+/** Множитель цены без лишних нулей: 2.0 → «2», 1.5 → «1.5». */
+fun multStr(m: Double): String = if (m % 1.0 == 0.0) m.toInt().toString() else m.toString()
