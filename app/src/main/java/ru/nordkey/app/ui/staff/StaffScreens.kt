@@ -146,7 +146,15 @@ fun ClientsScreen(me: Me, nav: Nav) {
                 }
             }
             LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(shown) { c -> RouterRow(c) { nav.go(Scr.Router(c.getString("ip"))) } }
+                // несколько роутеров у одного клиента — одной карточкой
+                val groups = shown.groupBy { c -> c.optLong("owner_tg").takeIf { it > 0 }?.toString() ?: c.getString("ip") }.values.toList()
+                items(groups) { g ->
+                    val ownerTg = g.first().optLong("owner_tg")
+                    if (g.size > 1 && ownerTg > 0)
+                        RouterGroupCard(g.first().str("owner_name") ?: g.first().str("tg_name") ?: "ID $ownerTg", ownerTg, g,
+                                        onOwner = { nav.go(Scr.Account(ownerTg)) }, onRouter = { nav.go(Scr.Router(it)) })
+                    else RouterRow(g.first()) { nav.go(Scr.Router(g.first().getString("ip"))) }
+                }
                 if (accounts.isNotEmpty()) item { SectionTitle("Аккаунты в боте") }
                 items(accounts) { a ->
                     NkCard(onClick = { nav.go(Scr.Account(a.optLong("tg_id"))) }) {

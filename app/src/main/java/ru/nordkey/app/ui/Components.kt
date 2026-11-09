@@ -31,9 +31,10 @@ class Load<T>(val data: T?, val error: String?, val loading: Boolean, val reload
 
 @Composable
 fun <T> rememberLoad(vararg keys: Any?, block: suspend () -> T): Load<T> {
-    var data by remember(*keys) { mutableStateOf<T?>(null) }
+    // в тестовых снимках (Api.fake) данные нужны сразу, в первом кадре
+    var data by remember(*keys) { mutableStateOf<T?>(if (ru.nordkey.app.net.Api.fake != null) runCatching { kotlinx.coroutines.runBlocking { block() } }.getOrNull() else null) }
     var error by remember(*keys) { mutableStateOf<String?>(null) }
-    var loading by remember(*keys) { mutableStateOf(true) }
+    var loading by remember(*keys) { mutableStateOf(data == null) }
     var tick by remember(*keys) { mutableIntStateOf(0) }
     LaunchedEffect(*keys, tick) {
         loading = true
@@ -117,7 +118,7 @@ fun Tile(label: String, value: String, modifier: Modifier = Modifier, warn: Bool
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Text(label, color = if (warn) Color(0xFFE9C891) else NK.Muted, fontSize = 11.sp, maxLines = 1)
+        Text(label, color = if (warn) NK.WarnLabel else NK.Muted, fontSize = 11.sp, maxLines = 1)
         Text(value, color = when { warn -> NK.WarnText; ok -> NK.OkText; else -> NK.Text },
              fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
@@ -238,3 +239,73 @@ fun dateRu(iso: String?): String {
 
 /** Множитель цены без лишних нулей: 2.0 → «2», 1.5 → «1.5». */
 fun multStr(m: Double): String = if (m % 1.0 == 0.0) m.toInt().toString() else m.toString()
+
+// ───────── люди и семейный доступ ─────────
+private val avatarHues = listOf(0xFF4F7DF3, 0xFF8B5CF6, 0xFF0EA5A4, 0xFFE07B39, 0xFFDB4C77, 0xFF3FA34D)
+
+/** Кружок с первой буквой имени; цвет постоянный для человека. */
+@Composable
+fun Avatar(name: String?, seed: Long, size: Int = 36) {
+    val c = Color(avatarHues[(Math.floorMod(seed, avatarHues.size.toLong())).toInt()])
+    Box(Modifier.size(size.dp).clip(CircleShape).background(c.copy(alpha = if (NK.dark) 0.28f else 0.16f)), contentAlignment = Alignment.Center) {
+        Text((name?.trim()?.trimStart('@')?.firstOrNull()?.uppercaseChar() ?: '?').toString(),
+             color = if (NK.dark) Color.White.copy(alpha = 0.92f) else c,
+             fontWeight = FontWeight.Bold, fontSize = (size * 0.42).sp)
+    }
+}
+
+/** Метка роли в семейном доступе. */
+@Composable
+fun RoleChip(role: String) {
+    val (t, fg, bg) = when (role) {
+        "main" -> Triple("Владелец", NK.AccentText, NK.AccentSoft)
+        "owner" -> Triple("Полный доступ", NK.AccentText, NK.AccentSoft)
+        "staff" -> Triple("Сотрудник", NK.Muted, NK.Surface2)
+        else -> Triple("Член семьи", NK.Family, NK.FamilySoft)
+    }
+    Text(t, color = fg, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1,
+         modifier = Modifier.clip(RoundedCornerShape(50)).background(bg).padding(horizontal = 8.dp, vertical = 3.dp))
+}
+
+/** Строка человека: аватар, имя, @ник, роль; справа — необязательное действие. */
+@Composable
+fun PersonRow(name: String?, username: String?, tg: Long, role: String, note: String? = null, onClick: (() -> Unit)? = null,
+              trailing: (@Composable () -> Unit)? = null) {
+    val title = name ?: username?.let { "@$it" } ?: "ID $tg"
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 6.dp, horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Avatar(title, tg)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val sub = listOfNotNull(username?.takeIf { name != null }?.let { "@$it" }, note).joinToString(" · ")
+            if (sub.isNotEmpty()) Text(sub, color = NK.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.width(8.dp))
+        RoleChip(role)
+        trailing?.invoke()
+    }
+}
+
+/** Заголовок блока с иконкой и счётчиком справа. */
+@Composable
+fun CardHeader(title: String, icon: ImageVector, tint: Color = NK.Link, count: String? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(tint.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(title, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f))
+        count?.let { Text(it, color = NK.Muted, fontSize = 13.sp) }
+    }
+}
+
+/** Тонкий разделитель внутри карточки. */
+@Composable
+fun NkDivider() = Box(Modifier.fillMaxWidth().height(1.dp).background(NK.Divider))
+
+/** Русское склонение: plural(2, "устройство", "устройства", "устройств"). */
+fun plural(n: Int, one: String, few: String, many: String): String {
+    val a = Math.abs(n) % 100; val b = a % 10
+    return when { a in 11..14 -> many; b == 1 -> one; b in 2..4 -> few; else -> many }
+}

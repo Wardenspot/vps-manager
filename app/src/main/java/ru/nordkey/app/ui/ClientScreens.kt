@@ -2,6 +2,7 @@ package ru.nordkey.app.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -48,7 +49,16 @@ fun MyRoutersScreen(me: Me, nav: Nav, withBar: Boolean) {
                              color = NK.Muted, fontSize = 14.sp)
                     }
                 }
-                items(list) { r -> RouterRow(r) { nav.go(Scr.Router(r.getString("ip"))) } }
+                val mine = list.filter { it.optString("level") != "member" }
+                val fam = list.filter { it.optString("level") == "member" }
+                if (mine.isNotEmpty() && fam.isNotEmpty()) item { SectionTitle("Мои") }
+                items(mine) { r -> RouterRow(r) { nav.go(Scr.Router(r.getString("ip"))) } }
+                if (fam.isNotEmpty()) item {
+                    SectionTitle("Семейный доступ")
+                    Text("Роутеры родных и близких: подписку оплачивает владелец.", color = NK.Muted, fontSize = 13.sp,
+                         modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
+                }
+                items(fam) { r -> RouterRow(r, extra = r.str("owner_name")) { nav.go(Scr.Router(r.getString("ip"))) } }
                 item {
                     OutlinedButton(onClick = { linkDialog = true }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                         Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Добавить роутер по коду")
@@ -81,8 +91,8 @@ fun RouterRow(r: JSONObject, extra: String? = null, onClick: () -> Unit) {
                     Mono(r.optString("ip").removePrefix("10.66.66."))
                     if (!r.optBoolean("migrated", true)) Text("старый сервер", color = NK.WarnText, fontSize = 12.sp)
                     val fam = r.optInt("family", 0)
-                    if (r.optString("level") == "member") Text("член семьи", color = NK.Link, fontSize = 12.sp, maxLines = 1)
-                    else if (fam > 0) Text("👨‍👩‍👧 $fam", color = NK.Muted, fontSize = 12.sp, maxLines = 1)
+                    if (r.optString("level") == "member") FamilyMark("семья")
+                    else if (fam > 0) FamilyMark("$fam")
                     extra?.let { Text(it, color = NK.Muted, fontSize = 12.sp, maxLines = 1) }
                 }
             }
@@ -91,7 +101,7 @@ fun RouterRow(r: JSONObject, extra: String? = null, onClick: () -> Unit) {
                      color = when { !online -> NK.Muted; slow -> NK.WarnText; else -> NK.Text }, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 r.optJSONObject("subscription")?.let { s ->
                     val dev = s.optInt("devices", 0)
-                    Text((if (s.optBoolean("active")) "до ${dateRu(s.str("expires_at")).take(5)}" else "нет подписки") + (if (dev > 1) " · $dev устр." else ""),
+                    Text((if (s.optBoolean("active")) "до ${dateRu(s.str("expires_at")).take(5)}" else "нет подписки") + (if (dev > 1) " · ×$dev" else ""),
                          color = if (s.optBoolean("active")) NK.Muted else NK.WarnText, fontSize = 12.sp)
                 }
             }
@@ -254,7 +264,7 @@ fun SessionsScreen(nav: Nav, onLogout: () -> Unit) {
                     OutlinedButton(onClick = { confirmAll = true }, modifier = Modifier.fillMaxWidth()) { Text("Выйти на всех других устройствах") }
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = { act { Api.post("/v1/auth/logout"); onLogout(); null } }, modifier = Modifier.fillMaxWidth(),
-                           colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A1F22), contentColor = NK.Bad)) { Text("Выйти на этом устройстве") }
+                           colors = ButtonDefaults.buttonColors(containerColor = NK.BadSoft, contentColor = NK.Bad)) { Text("Выйти на этом устройстве") }
                 }
             }
         }
@@ -300,6 +310,8 @@ fun MoreScreen(me: Me, nav: Nav, onLogout: () -> Unit, reloadMe: () -> Unit) {
                 MenuItem("Добавить роутер по коду", Icons.Default.Add) { linkDialog = true }
                 MenuItem("Поддержка", Icons.Default.SupportAgent) { nav.go(Scr.Support) }
             }
+            SectionTitle("Оформление")
+            ThemePicker()
             MenuItem("Где выполнен вход", Icons.Default.Devices) { nav.go(Scr.Sessions) }
             MenuItem("Выйти", Icons.AutoMirrored.Filled.Logout, danger = true) { act { Api.post("/v1/auth/logout"); onLogout(); null } }
             Text("NordKey ${BuildConfig.VERSION_NAME}", color = NK.Off, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
@@ -315,13 +327,84 @@ fun MoreScreen(me: Me, nav: Nav, onLogout: () -> Unit, reloadMe: () -> Unit) {
 @Composable
 fun MenuItem(title: String, icon: ImageVector, danger: Boolean = false, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(NK.Surface).clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(NK.Surface).border(1.dp, NK.Line, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, tint = if (danger) NK.Bad else NK.Muted)
         Spacer(Modifier.width(12.dp))
         Text(title, color = if (danger) NK.Bad else NK.Text, modifier = Modifier.weight(1f))
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = NK.Off)
+    }
+}
+
+
+/** Маленькая отметка семейного доступа: значок людей и подпись. */
+@Composable
+fun FamilyMark(text: String) {
+    Row(Modifier.clip(RoundedCornerShape(50)).background(NK.FamilySoft).padding(horizontal = 6.dp, vertical = 1.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.Groups, null, tint = NK.Family, modifier = Modifier.size(13.dp))
+        Spacer(Modifier.width(3.dp))
+        Text(text, color = NK.Family, fontSize = 11.sp, maxLines = 1)
+    }
+}
+
+/** Несколько роутеров одного клиента — одной карточкой: владелец, общая подписка и роутеры списком. */
+@Composable
+fun RouterGroupCard(owner: String, ownerTg: Long, routers: List<JSONObject>, onOwner: () -> Unit, onRouter: (String) -> Unit) {
+    val sub = routers.firstNotNullOfOrNull { it.optJSONObject("subscription") }
+    NkCard {
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onOwner), verticalAlignment = Alignment.CenterVertically) {
+            Avatar(owner, ownerTg, 34)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(owner, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1)
+                Text("${routers.size} ${plural(routers.size, "роутер", "роутера", "роутеров")}" +
+                     (sub?.let { s -> " · " + (if (s.optBoolean("active")) "подписка до ${dateRu(s.str("expires_at")).take(5)}" else "нет подписки") +
+                         (s.optDouble("price_mult", 1.0).takeIf { it != 1.0 }?.let { " · ×${multStr(it)}" } ?: "") } ?: ""),
+                     color = if (sub?.optBoolean("active") == false) NK.WarnText else NK.Muted, fontSize = 12.sp, maxLines = 1)
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = NK.Off)
+        }
+        routers.forEach { r ->
+            NkDivider()
+            val online = r.optBoolean("online"); val rtt = r.dbl("rtt"); val slow = rtt != null && rtt > 120
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onRouter(r.getString("ip")) }.padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Dot(when { !online -> NK.Off; slow -> NK.Warn; else -> NK.Ok })
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(r.optString("name"), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Mono(r.optString("ip").removePrefix("10.66.66."))
+                        if (!r.optBoolean("migrated", true)) Text("старый сервер", color = NK.WarnText, fontSize = 12.sp)
+                        r.optInt("family", 0).takeIf { it > 0 }?.let { FamilyMark("$it") }
+                    }
+                }
+                Text(if (!online) "офлайн" else rtt?.let { "${it.toInt()} мс" } ?: "онлайн",
+                     color = when { !online -> NK.Muted; slow -> NK.WarnText; else -> NK.Text }, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+
+/** Тема: как в системе / светлая / тёмная. */
+@Composable
+fun ThemePicker() {
+    val ctx = LocalContext.current
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(NK.Surface).border(1.dp, NK.Line, RoundedCornerShape(14.dp)).padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        listOf(Triple(ThemePref.SYSTEM, "Как в системе", Icons.Default.BrightnessAuto), Triple(ThemePref.LIGHT, "Светлая", Icons.Default.LightMode),
+               Triple(ThemePref.DARK, "Тёмная", Icons.Default.DarkMode)).forEach { (m, t, ic) ->
+            val sel = ThemePref.mode == m
+            Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if (sel) NK.AccentSoft else NK.Surface)
+                       .clickable { ThemePref.set(ctx, m) }.padding(vertical = 10.dp),
+                   horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(ic, null, tint = if (sel) NK.Link else NK.Muted, modifier = Modifier.size(20.dp))
+                Text(t, color = if (sel) NK.AccentText else NK.Muted, fontSize = 12.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal)
+            }
+        }
     }
 }

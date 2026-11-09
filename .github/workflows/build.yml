@@ -18,6 +18,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Номер версии (1.1.x)
+        run: echo "NK_VERSION_NAME=1.1.$(( ${{ github.run_number }} - 10 ))" >> "$GITHUB_ENV"
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -63,7 +66,7 @@ jobs:
         if: steps.key.outputs.signed == '1' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: NordKey 1.0.${{ github.run_number }}
+          tag_name: v${{ env.NK_VERSION_NAME }}
+          name: NordKey ${{ env.NK_VERSION_NAME }}
           make_latest: true
           files: NordKey.apk
