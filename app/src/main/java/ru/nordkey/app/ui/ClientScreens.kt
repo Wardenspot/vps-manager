@@ -44,7 +44,7 @@ fun MyRoutersScreen(me: Me, nav: Nav, withBar: Boolean) {
                     NkCard {
                         Text("Пока нет роутеров", fontWeight = FontWeight.SemiBold)
                         Text("Если NordKey настроил вам роутер — откройте персональную ссылку из бота. " +
-                             "Если роутер оформлен на другой аккаунт Telegram — получите там код в «🛜 Мой роутер» → «👥 Поделиться роутером».",
+                             "Если роутер оформлен на другой аккаунт Telegram — получите там код в «🛜 Мой роутер» → «👨‍👩‍👧 Семейный доступ».",
                              color = NK.Muted, fontSize = 14.sp)
                     }
                 }
@@ -80,6 +80,9 @@ fun RouterRow(r: JSONObject, extra: String? = null, onClick: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Mono(r.optString("ip").removePrefix("10.66.66."))
                     if (!r.optBoolean("migrated", true)) Text("старый сервер", color = NK.WarnText, fontSize = 12.sp)
+                    val fam = r.optInt("family", 0)
+                    if (r.optString("level") == "member") Text("член семьи", color = NK.Link, fontSize = 12.sp, maxLines = 1)
+                    else if (fam > 0) Text("👨‍👩‍👧 $fam", color = NK.Muted, fontSize = 12.sp, maxLines = 1)
                     extra?.let { Text(it, color = NK.Muted, fontSize = 12.sp, maxLines = 1) }
                 }
             }
@@ -87,7 +90,8 @@ fun RouterRow(r: JSONObject, extra: String? = null, onClick: () -> Unit) {
                 Text(if (!online) "офлайн" else rtt?.let { "${it.toInt()} мс" } ?: "онлайн",
                      color = when { !online -> NK.Muted; slow -> NK.WarnText; else -> NK.Text }, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 r.optJSONObject("subscription")?.let { s ->
-                    Text(if (s.optBoolean("active")) "до ${dateRu(s.str("expires_at")).take(5)}" else "нет подписки",
+                    val dev = s.optInt("devices", 0)
+                    Text((if (s.optBoolean("active")) "до ${dateRu(s.str("expires_at")).take(5)}" else "нет подписки") + (if (dev > 1) " · $dev устр." else ""),
                          color = if (s.optBoolean("active")) NK.Muted else NK.WarnText, fontSize = 12.sp)
                 }
             }
@@ -170,11 +174,16 @@ fun SubscriptionScreen(nav: Nav, withBar: Boolean) {
                     if (s != null) Text(
                         (if (active) "до ${dateRu(s.str("expires_at"))} · осталось ${s.optInt("days_left")} дн." else "закончилась ${dateRu(s.str("expires_at"))}") +
                             (if (s.optBoolean("trial")) " · пробный период" else ""), color = NK.Text)
+                    val dev = s?.optInt("devices", 0) ?: 0
+                    if (dev > 1) Text("Устройств в подписке: $dev — продление сразу за все", color = NK.Text, fontSize = 14.sp)
                 }
                 Button(onClick = { openUrl(ctx, j.optString("pay_url")) }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
                     Text(if (active) "Продлить" else "Оформить подписку", fontSize = 16.sp)
                 }
                 Text("Оплата проходит в Telegram-боте NordKey. После оплаты срок здесь обновится сам.", color = NK.Muted, fontSize = 13.sp)
+                Text("Ещё одно устройство (второй телефон, компьютер, сервер) — в боте: «📄 Мой конфиг» → «➕ Добавить устройство». " +
+                     "Член семьи может видеть ваш роутер со своего Telegram бесплатно: «🛜 Мой роутер» → «👨‍👩‍👧 Семейный доступ».",
+                     color = NK.Muted, fontSize = 13.sp)
             }
         }
     }
