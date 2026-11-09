@@ -35,8 +35,12 @@ import (
 	"norddesk/internal/wire"
 )
 
+// defaultRelay задаётся при сборке: -ldflags "-X main.defaultRelay=IP:PORT".
+// Так скачанный Host.exe сразу идёт на нужный релей без флага -relay.
+var defaultRelay = "127.0.0.1:8765"
+
 func main() {
-	relayAddr := flag.String("relay", "127.0.0.1:8765", "адрес релея host:port")
+	relayAddr := flag.String("relay", defaultRelay, "адрес релея host:port")
 	fixedID := flag.String("id", "", "постоянный ID (по умолчанию случайный)")
 	unattended := flag.String("pw", "", "постоянный пароль (режим без подтверждения, для своих машин)")
 	noConfirm := flag.Bool("no-confirm", false, "не спрашивать согласие (ОПАСНО; по умолчанию спрашиваем)")

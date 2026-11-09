@@ -48,6 +48,8 @@ jobs:
         working-directory: norddesk
     env:
       CGO_ENABLED: "0"
+      # Адрес релея, зашиваемый в клиенты, чтобы скачавший подключался без -relay.
+      NDSK_RELAY: "143.246.193.103:8765"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -59,8 +61,8 @@ jobs:
           GOOS: windows
           GOARCH: amd64
         run: |
-          go build -ldflags "-s -w -H=windowsgui" -o ../out/NordDesk.exe ./cmd/viewer
-          go build -ldflags "-s -w" -o ../out/NordDesk-Host.exe ./cmd/host
+          go build -ldflags "-s -w -H=windowsgui -X main.defaultRelay=${NDSK_RELAY}" -o ../out/NordDesk.exe ./cmd/viewer
+          go build -ldflags "-s -w -X main.defaultRelay=${NDSK_RELAY}" -o ../out/NordDesk-Host.exe ./cmd/host
 
       - name: Сборка релея (Linux)
         env:

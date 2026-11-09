@@ -45,8 +45,12 @@ type app struct {
 	ui    *localws.Conn
 }
 
+// defaultRelay задаётся при сборке: -ldflags "-X main.defaultRelay=IP:PORT".
+// Так скачанный NordDesk.exe сразу идёт на нужный релей без флага -relay.
+var defaultRelay = "127.0.0.1:8765"
+
 func main() {
-	relayAddr := flag.String("relay", "127.0.0.1:8765", "адрес релея host:port")
+	relayAddr := flag.String("relay", defaultRelay, "адрес релея host:port")
 	port := flag.Int("port", 0, "локальный порт окна (0 — случайный)")
 	presetID := flag.String("id", "", "подставить ID в окно")
 	noOpen := flag.Bool("no-open", false, "не открывать окно автоматически")
