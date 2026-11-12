@@ -15,11 +15,16 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
+// Hosts — адреса сервера по порядку. Если провайдер заблокировал один, клиент пробует следующий
+// и запоминает тот, что ответил. 10.66.66.1 — адрес сервера внутри VPN.
+var Hosts = []string{"143.246.193.43", "143.246.193.103", "10.66.66.1"}
+
 const (
-	Host       = "143.246.193.103"
+	Host       = "143.246.193.43"
 	Base       = "https://" + Host
 	CertSHA256 = "FF73B7792A7168B4ED276B5BF9389B5BCCA02B01F5D757F58D986E0330C9A278"
 )
@@ -39,13 +44,20 @@ type Client struct {
 	Base string
 	Pin  string
 	hc   *http.Client
+	alt  []string      // запасные адреса (только для сервера по умолчанию)
+	cur  *atomic.Int32 // какой из alt ответил последним
 }
 
 func New(base, pin string) *Client {
-	c := &Client{Base: strings.TrimRight(base, "/"), Pin: strings.ToUpper(pin)}
+	c := &Client{Base: strings.TrimRight(base, "/"), Pin: strings.ToUpper(pin), cur: new(atomic.Int32)}
+	if c.Base == Base {
+		for _, h := range Hosts {
+			c.alt = append(c.alt, "https://"+h)
+		}
+	}
 	tr := &http.Transport{
 		Proxy:               nil, // системный прокси не нужен: сервер известен
-		DialContext:         (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		DialContext:         (&net.Dialer{Timeout: 7 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 		TLSHandshakeTimeout: 15 * time.Second,
 		IdleConnTimeout:     90 * time.Second,
 		MaxIdleConnsPerHost: 4,
@@ -79,13 +91,45 @@ func (c *Client) WithTimeout(d time.Duration) *Client {
 
 // Raw — запрос как есть: статус, тело, заголовок Content-Type.
 func (c *Client) Raw(method, path, token string, body []byte) (int, []byte, string, error) {
+	bases := []string{c.Base}
+	start := 0
+	if len(c.alt) > 0 {
+		bases, start = c.alt, int(c.cur.Load())
+	}
+	var lastErr error
+	for i := range bases {
+		idx := (start + i) % len(bases)
+		code, b, ct, err, sent := c.raw1(bases[idx], method, path, token, body)
+		if err == nil {
+			c.cur.Store(int32(idx))
+			return code, b, ct, nil
+		}
+		lastErr = err
+		// POST повторяем на другом адресе, только если запрос точно не ушёл на сервер.
+		if err == ErrPin || (sent && method != http.MethodGet) {
+			break
+		}
+	}
+	return 0, nil, "", lastErr
+}
+
+// beforeSend — ошибка случилась до отправки запроса (не удалось подключиться).
+func beforeSend(err error) bool {
+	var op *net.OpError
+	if errors.As(err, &op) && op.Op == "dial" {
+		return true
+	}
+	return strings.Contains(err.Error(), "TLS handshake")
+}
+
+func (c *Client) raw1(base, method, path, token string, body []byte) (int, []byte, string, error, bool) {
 	var rd io.Reader
 	if body != nil {
 		rd = bytes.NewReader(body)
 	}
-	req, err := http.NewRequest(method, c.Base+path, rd)
+	req, err := http.NewRequest(method, base+path, rd)
 	if err != nil {
-		return 0, nil, "", err
+		return 0, nil, "", err, false
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -97,13 +141,16 @@ func (c *Client) Raw(method, path, token string, body []byte) (int, []byte, stri
 	resp, err := c.hc.Do(req)
 	if err != nil {
 		if errors.Is(err, ErrPin) || strings.Contains(err.Error(), ErrPin.Error()) {
-			return 0, nil, "", ErrPin
+			return 0, nil, "", ErrPin, false
 		}
-		return 0, nil, "", errors.New("нет связи с сервером NordKey — проверьте интернет")
+		return 0, nil, "", errors.New("нет связи с сервером NordKey — проверьте интернет"), !beforeSend(err)
 	}
 	defer resp.Body.Close()
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
-	return resp.StatusCode, b, resp.Header.Get("Content-Type"), err
+	if err != nil {
+		return resp.StatusCode, b, resp.Header.Get("Content-Type"), err, true
+	}
+	return resp.StatusCode, b, resp.Header.Get("Content-Type"), nil, true
 }
 
 // Call — JSON-запрос; ошибка сервера превращается в *Error с его текстом.
