@@ -48,7 +48,8 @@ class ScreensTest {
 
     private fun router(level: String) = """{"ip": "10.66.66.14", "name": "Анастасия — дом", "migrated": true, "online": true, "handshake_ago": 12, "rtt": 34.0,
         "level": "$level", "subscription": ${if (level == "member") sub1 else sub2}, "game": {"available": false, "on": false}, "owner_tg": 992762350,
-        "family": 2, "owner_name": "Анастасия Филенкова", "access": [$anast, $roman, $garden]}"""
+        "family": 2, "owner_name": "Анастасия Филенкова", "access": [$anast, $roman, $garden],
+        "cloud_url": "https://home-arbgpfk.netcraze.pro", "admin_pass": true}"""
 
     private val hist = JSONObject().put("points", org.json.JSONArray().apply {
         for (i in 0 until 96) put(JSONObject().put("rtt", if (i == 40) JSONObject.NULL else 30 + (i * 7 % 23) + (if (i in 60..64) 90 else 0)))
