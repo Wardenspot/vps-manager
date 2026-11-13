@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 import ru.nordkey.app.net.*
+import ru.nordkey.app.util.openUrl
 import ru.nordkey.app.util.shareText
 
 private sealed interface RDialog {
@@ -41,6 +42,7 @@ private sealed interface RDialog {
     data class RemoveAccess(val tg: Long, val name: String) : RDialog
     data object DnsSplit : RDialog
     data object Reboot : RDialog
+    data object SecretCode : RDialog
 }
 
 @Composable
@@ -52,6 +54,8 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
     var dialog by remember { mutableStateOf<RDialog?>(null) }
     var busy by remember { mutableStateOf(false) }
     var investigate by remember { mutableStateOf(false) }
+    var secret by remember { mutableStateOf<JSONObject?>(null) }
+    LaunchedEffect(secret) { if (secret != null) { delay(60_000); secret = null } }
     val act = rememberAction()
     val ctx = LocalContext.current
 
@@ -133,6 +137,37 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                         if (canShare && members.size < 3) OutlinedButton(onClick = { dialog = RDialog.Share }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Пригласить члена семьи")
                         }
+                    }
+                }
+                // вход в настройки роутера: облачная ссылка и пароль администратора (по коду из Telegram)
+                val cloud = r.str("cloud_url")
+                val hasPass = r.optBoolean("admin_pass")
+                if (cloud != null || hasPass) NkCard {
+                    CardHeader("Вход в настройки роутера", Icons.Default.Key)
+                    Text("Настройки роутера открываются из любого места — даже когда VPN не работает.", color = NK.Muted, fontSize = 13.sp)
+                    if (cloud != null) Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(cloud.removePrefix("https://"), color = NK.Link, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { openUrl(ctx, cloud) }) {
+                            Icon(Icons.Default.OpenInBrowser, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Открыть")
+                        }
+                    }
+                    if (hasPass) {
+                        NkDivider()
+                        val pw = secret?.optString("password")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Логин: admin", color = NK.Text, fontSize = 14.sp)
+                                Text("Пароль: " + (pw ?: "••••••••••••"), color = NK.Text, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+                            }
+                            if (pw == null) TextButton(onClick = {
+                                act { busy = true; try { Api.post("/v1/routers/$ip/secret/request"); dialog = RDialog.SecretCode; null } finally { busy = false } }
+                            }) { Icon(Icons.Default.Visibility, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Показать") }
+                            else TextButton(onClick = { ru.nordkey.app.ui.staff.copy(ctx, pw); toast(ctx, "Пароль скопирован") }) {
+                                Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Копировать")
+                            }
+                        }
+                        Text(if (pw == null) "Чтобы показать пароль, пришлём код в ваш Telegram." else "Пароль скроется через минуту.",
+                             color = NK.Muted, fontSize = 12.sp)
                     }
                 }
                 if (!r.optBoolean("migrated", true)) NkCard(bg = NK.WarnSoft, border = NK.WarnLine) {
@@ -324,6 +359,11 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
         RDialog.Reboot -> ConfirmDialog("Перезагрузить роутер?", "Интернет у клиента пропадёт на 1–2 минуты.", "Перезагрузить", onDismiss = { dialog = null }) {
             dialog = null
             act { Api.post("/v1/staff/routers/$ip/reboot"); "Роутер перезагружается" }
+        }
+        RDialog.SecretCode -> InputDialog("Код из Telegram", "Бот NordKey прислал вам 6-значный код. Он действует 5 минут.",
+                                          "123456", "Показать пароль", onDismiss = { dialog = null }) { c ->
+            dialog = null
+            act { busy = true; try { secret = Api.post("/v1/routers/$ip/secret/reveal", "code" to c); null } finally { busy = false } }
         }
         is RDialog.RemoveAccess -> ConfirmDialog("Убрать доступ?", "${d.name.ifBlank { "Этот аккаунт" }} больше не увидит роутер в приложении.",
                                                  "Убрать", onDismiss = { dialog = null }) {
