@@ -81,6 +81,8 @@ const P = {
   person: 'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z',
   add: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
   next: 'M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z',
+  sort: 'M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z',
+  help: 'M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z',
   support: 'M21 12.22C21 6.73 16.74 3 12 3c-4.69 0-9 3.65-9 9.28-.6.34-1 .98-1 1.72v2c0 1.1.9 2 2 2h1v-6.1c0-3.87 3.13-7 7-7s7 3.13 7 7V19h-8v2h8c1.1 0 2-.9 2-2v-1.22c.59-.31 1-.92 1-1.64v-2.3c0-.7-.41-1.31-1-1.62z',
   devices: 'M4 6h18V4H4c-1.1 0-2 .9-2 2v11H0v3h14v-3H4V6zm19 2h-6c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1zm-1 9h-4v-7h4v7z',
   logout: 'M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z',
@@ -250,7 +252,8 @@ function loginScreen() {
     box.replaceChildren(
       h('img.logo', { src: 'icon.svg', alt: '' }), h('h1', 'NordKey'), h('div.muted', 'VPN для дома, роутера и компьютера'),
       h('div', { style: { height: '20px' } }),
-      h('div.muted', 'Вход — через ваш Telegram-бот NordKey. Пароль не нужен.'), btn,
+      btn,
+      h('button.btn.ghost.big.wide', { onclick: () => { const p = setupScreen(true); root.replaceChildren(p.el); } }, ico('router'), ' Подключить роутер'),
       msg ? h('div.warnc', msg) : null,
       h('div.small', { style: { color: 'var(--off)', marginTop: '24px' } }, 'NordKey ' + (S.version || '')));
   };
@@ -260,7 +263,7 @@ function loginScreen() {
     box.replaceChildren(
       h('img.logo', { src: 'icon.svg', alt: '' }), h('h1', 'NordKey'),
       h('div.card', { style: { width: '100%' } }, h('div.muted', 'В Telegram нажмите это число:'), h('div.pick', String(r.pick)),
-        h('div.muted.small', 'Бот покажет три числа — выберите это. Так никто не сможет войти в ваш аккаунт по чужой ссылке.')),
+        h('div.row', { style: { justifyContent: 'center' } }, h('span.muted.small', 'Зачем число?'), helpDot('login'))),
       h('div.row', h('div.spin'), h('span.muted', 'Жду подтверждения в Telegram…')),
       h('button.btn.ghost.wide', { onclick: () => { if (tg) location.href = tg; else openExt(r.bot_url); } }, 'Открыть Telegram ещё раз'),
       h('a.small', { href: r.bot_url, target: '_blank', rel: 'noopener' }, 'Нет Telegram на компьютере? Открыть ссылку в браузере'),
@@ -294,9 +297,7 @@ function vpnScreen() {
   const tiles = h('div.tiles');
   const staff = isStaff();
   const modes = staff ? h('div.modes') : h('div.card',
-    h('div.t', 'Как на роутере'),
-    h('div.muted.small', 'Через VPN идёт только то, что не открывается из России (Instagram, YouTube, ChatGPT…), и то, что настроила для вас поддержка. ' +
-      'Игры, банки, российские сайты и всё остальное — напрямую, с обычной скоростью и пингом.'));
+    h('div.t.row', 'Как на роутере', helpDot('routing')));
   let lastVer = null;
   const sites = h('div.col');
   const info = h('div.small.muted');
@@ -391,11 +392,13 @@ function routerRow(r, extra, onclick) {
   const rtt = r.rtt, slow = rtt != null && rtt > 120, online = !!r.online;
   const s = r.subscription;
   return h('div.card.click', { onclick }, h('div.row',
-    h('span.dot', { style: { background: !online ? 'var(--off)' : slow ? 'var(--warn)' : 'var(--ok)' } }),
+    daysRing(s),
     h('div.grow', h('div.t', r.name || r.ip), h('div.row.small.muted', h('span.mono', (r.ip || '').replace('10.66.66.', '')),
       r.migrated === false ? h('span.warnc', 'старый сервер') : null, extra ? h('span', extra) : null)),
     h('div', { style: { textAlign: 'right' } },
-      h('div.t', { style: { color: !online ? 'var(--muted)' : slow ? 'var(--warn-text)' : '' } }, !online ? 'офлайн' : rtt != null ? `${Math.round(rtt)} мс` : 'онлайн'),
+      h('div.t.row', { style: { justifyContent: 'flex-end', gap: '6px', color: !online ? 'var(--muted)' : slow ? 'var(--warn-text)' : '' } },
+        h('span.dot', { style: { width: '8px', height: '8px', background: !online ? 'var(--off)' : slow ? 'var(--warn)' : 'var(--ok)' } }),
+        !online ? 'офлайн' : rtt != null ? `${Math.round(rtt)} мс` : 'онлайн'),
       s ? h('div.small', { style: { color: s.active ? 'var(--muted)' : 'var(--warn-text)' } }, s.active ? 'до ' + dateRu(s.expires_at).slice(0, 5) : 'нет подписки') : null)));
 }
 
@@ -501,7 +504,7 @@ function routerScreen(ip) {
     const game = r.game && r.game.available ? (() => {
       const cb = h('input', { type: 'checkbox', checked: !!r.game.on, disabled: !canWrite });
       cb.onchange = () => act(async () => { const x = await api.post(`/v1/routers/${ip}/game`, { on: cb.checked }); cb.checked = !!x.on; return x.on ? 'Игровой режим включён' : 'Выключен'; });
-      return h('div.card', h('label.row', { style: { cursor: 'pointer' } }, h('div.grow', h('div.t', 'Игровой режим'), h('div.muted.small', 'подскажет пустить игровой сервер напрямую, если через VPN высокий пинг')), cb));
+      return h('div.card', h('label.row', { style: { cursor: 'pointer' } }, h('div.grow', h('div.t.row', 'Игровой режим', helpDot('game'))), cb));
     })() : null;
     const access = arr(r.access);
     const slow = rtt != null && rtt > 120;
@@ -616,7 +619,7 @@ function subscriptionScreen() {
         String(active ? s.days_left : 0), plural(active ? s.days_left : 0, 'день', 'дня', 'дней'), active ? 'Подписка активна' : 'Подписки нет',
         [s ? (active ? `до ${dateRu(s.expires_at)}` : `закончилась ${dateRu(s.expires_at)}`) : null, s && s.trial ? 'пробный период' : null]),
       h('button.btn.big.wide', { onclick: () => openExt(j.pay_url) }, active ? 'Продлить' : 'Оформить подписку'),
-      h('div.muted.small', 'Оплата проходит в Telegram-боте NordKey. После оплаты срок здесь обновится сам. Подписка общая: роутер, телефон и этот компьютер.'));
+      h('div.row', { style: { justifyContent: 'center' } }, h('span.muted.small', 'Как оплатить'), helpDot('subscription')));
   });
   run();
   return pg;
@@ -631,7 +634,7 @@ function devicesScreen() {
       h('div.row', h('button.btn', { onclick: () => download((d.name || 'NordKey') + '.conf', d.conf) }, 'Скачать файл'),
         h('button.btn.ghost', { onclick: () => copy(d.conf, 'Конфиг скопирован') }, 'Скопировать')),
       h('div.warnc.small', 'Не пересылайте этот файл посторонним — по нему можно подключиться к вашему VPN.')))
-      : h('div.card', h('div.t', 'Пока нет конфигураций для телефона.'), h('div.muted.small', 'Их выдаёт бот: «📄 Мой конфиг». Для роутера отдельный конфиг не нужен — он уже настроен.'))));
+      : h('div.card', h('div.t', 'Пока нет конфигураций для телефона.'))));
   run();
   return pg;
 }
@@ -650,7 +653,7 @@ function supportScreen() {
       if (lastN >= 0 && msgs.length && msgs[msgs.length - 1].sender !== 'client') local('POST', '/rules/refresh').catch(() => {}); // поддержка могла пустить сайт
       lastN = msgs.length;
       chat.replaceChildren(...(msgs.length ? msgs.map(m => h('div.bubble' + (m.sender === 'client' ? '.mine' : m.sender === 'ai' ? '.ai' : ''), m.text))
-        : [h('div.muted', 'Опишите проблему — например «не открывается YouTube на компьютере». Поддержка сразу проверит ваш VPN и роутер.')]),
+        : [h('div.row', h('div.t', 'Напишите, что не работает'), helpDot('support'))]),
         msgs.length && msgs[msgs.length - 1].sender === 'client' ? h('div.muted.small', 'Проверяем…') : '');
       chat.scrollTop = chat.scrollHeight;
     } catch (e) { }
@@ -689,7 +692,10 @@ function logScreen() {
 function moreScreen() {
   const pg = page('Ещё');
   const a = ME.account;
-  const item = (t, icon, f, danger) => h('div.menu' + (danger ? '.danger' : ''), { onclick: f, role: 'button', tabindex: 0 }, ico(icon), h('span.grow', t));
+  const TINTS = ['#5CC8FF', '#7C9CFF', '#B18CFF', '#3FE0A0', '#FFB547', '#FF8FB1', '#35E0FF'];
+  const tint = t => { let x = 0; for (const ch of t) x = (x * 31 + ch.codePointAt(0)) >>> 0; return TINTS[x % TINTS.length]; };
+  const item = (t, icon, f, danger) => h('div.menu' + (danger ? '.danger' : ''), { onclick: f, role: 'button', tabindex: 0 },
+    h('span.mi', { style: danger ? '' : `--t:${tint(t)}` }, ico(icon)), h('span.grow', t), ico('next'));
   pg.body.append(h('div.center.col',
     h('div.card', h('div.row', h('span.linkc', { style: { width: '40px', height: '40px', display: 'grid' } }, ico('person')),
       h('div', h('div.t', a.name || 'Аккаунт'), h('div.muted.small', a.role_name || '')))),
@@ -710,6 +716,7 @@ function moreScreen() {
       item('Поддержка', 'support', () => go(supportScreen)),
     ],
     item('Телефон: конфиг AmneziaWG', 'key', () => go(devicesScreen)),
+    item('Помощь', 'help', () => go(helpScreen)),
     item('Где выполнен вход', 'devices', () => go(sessionsScreen)),
     h('div.sect', 'Этот компьютер'),
     item('Журнал NordKey', 'doc', () => go(logScreen)),
@@ -751,16 +758,21 @@ function dashboardScreen() {
 
 function clientsScreen() {
   const pg = page('Клиенты', { refresh: () => run() });
-  let q = '', filter = 'all', all = [], findT;
+  let q = '', filter = 'all', sort = 'days', all = [], findT;
   const list = h('div.col'), found = h('div.col'), chips = h('div.seg');
   const inp = h('input.in', { placeholder: 'Имя, IP или @ник', spellcheck: false });
   const problem = c => (c.online && (c.rtt || 0) > 120) || (c.subscription && c.subscription.active === false);
   const F = { all: () => true, problems: problem, offline: c => !c.online && c.migrated, old: c => !c.migrated };
   const paint = () => {
     chips.replaceChildren(...[['all', 'Все'], ['problems', 'Проблемы'], ['offline', 'Офлайн'], ['old', 'На старом']].map(([k, t]) =>
-      h('button' + (filter === k ? '.on' : ''), { onclick: () => { filter = k; paint(); } }, `${t} ${all.filter(F[k]).length}`)));
+      h('button' + (filter === k ? '.on' : ''), { onclick: () => { filter = k; paint(); } }, `${t} ${all.filter(F[k]).length}`)),
+      h('button', { title: 'Сортировка', onclick: () => { sort = { days: 'days_desc', days_desc: 'name', name: 'days' }[sort]; paint(); } },
+        ico('sort'), { days: ' Дни ↑', days_desc: ' Дни ↓', name: ' Имя' }[sort]));
     const ql = q.toLowerCase();
     const shown = all.filter(c => (!q || ['name', 'ip', 'tg_name'].some(k => String(c[k] || '').toLowerCase().includes(ql))) && F[filter](c));
+    const dl = c => daysLeft(c.subscription);
+    shown.sort(sort === 'days' ? (a, b) => dl(a) - dl(b) : sort === 'days_desc' ? (a, b) => dl(b) - dl(a)
+      : (a, b) => String(a.owner_name || a.name || '').localeCompare(String(b.owner_name || b.name || ''), 'ru'));
     list.replaceChildren(...shown.map(c => routerRow(c, null, () => go(routerScreen, c.ip))));
   };
   inp.addEventListener('input', () => {
@@ -802,7 +814,7 @@ function autopilotScreen() {
         const cb = h('input', { type: 'checkbox', checked: s[k] !== false, disabled: !can('routers.admin') });
         cb.onchange = () => act(async () => { await api.post('/v1/staff/guard/settings', { [k]: cb.checked }); });
         return h('label.list-row', { style: { cursor: 'pointer', padding: '10px 0' } }, h('span.grow', t), cb);
-      }), h('div.muted.small', 'Сам: перезапуск служб сервера, чистка диска, починка DNS на роутере, WARP. По кнопке: перезагрузка роутера, изменения маршрутов и DNS. Никогда: удаление, оплаты, роли.')),
+      }), h('div.row', { style: { justifyContent: 'flex-end' } }, h('span.muted.small', 'Что делает сам'), helpDot('autopilot'))),
       active.length ? [h('div.sect', 'Требует внимания'), active.map(row)] : h('div.card.ok', h('div.t.okc', 'Всё спокойно — ничего не требует внимания')),
       done.length ? [h('div.sect', 'За последние 3 дня'), done.map(row)] : null);
   });
@@ -958,8 +970,8 @@ function batScreen() {
   const ok = () => !router.value.trim() || /^\d{1,3}(\.\d{1,3}){3}$/.test(router.value.trim());
   const q = () => router.value.trim() ? '?router=' + encodeURIComponent(router.value.trim()) : '';
   pg.body.append(h('div.center.col',
-    h('div.card', h('div.t', 'Один файл для всех случаев'), h('div.muted.small', 'Запускается на компьютере, подключённом к роутеру Keenetic: старых клиентов переносит на новый сервер, новых — подключает (нужен код администратора). После настройки новый клиент получает персональную ссылку на бота.')),
-    h('div.muted.small', 'Адрес роутера — только если у роутера нестандартный адрес'), router,
+    h('div.row', h('span.muted.small', 'Что делает батник'), helpDot('bat')),
+    router,
     h('button.btn', { onclick: () => { if (!ok()) return toast('Неверный адрес роутера'); act(async () => { await api.post('/v1/staff/bat/send', { to: 'me', router: router.value.trim() || null }); return 'Отправлено вам в Telegram'; }); } }, ico('send'), 'Себе в Telegram'),
     h('button.btn.ghost', { onclick: () => { if (!ok()) return toast('Неверный адрес роутера'); act(async () => {
       const r = await fetch('/api/v1/staff/bat' + q(), { headers: { 'X-NK-Key': KEY } });
@@ -1071,9 +1083,11 @@ function routerArt(state) { // idle | run | done | fail
   return h('div.wiz-art-box', { html: svg });
 }
 
-function setupScreen() {
-  const pg = page('Подключить роутер', { sub: 'мастер NordKey для Keenetic' });
+function setupScreen(self = false) {
+  const pg = page('Подключить роутер', { actions: helpDot('setup') });
   pg.el.classList.add('wiz');
+  const exit = () => { if (self) loginScreen(); else { stack = []; show(); } };
+  if (self) pg.top.prepend(h('button.icon-btn', { title: 'Назад', onclick: () => { clearTimers(); loginScreen(); } }, ico('back')));
   const f = { host: '', login: 'admin', pass: '', name: '' };
   let found = null; // null — ищем, '' — не нашли, иначе адрес
 
@@ -1093,27 +1107,23 @@ function setupScreen() {
   function idle() {
     const inp = (k, ph, type) => { const i = h('input.in', { value: f[k], placeholder: ph, type: type || 'text', spellcheck: false }); i.oninput = () => { f[k] = i.value; startBtn.disabled = !(found && f.pass); }; return i; };
     const startBtn = h('button.wiz-go', { disabled: !(found && f.pass), onclick: () => act(async () => {
-      await local('POST', '/setup/start', { host: f.host, login: f.login.trim() || 'admin', pass: f.pass, name: f.name.trim() });
+      await local('POST', '/setup/start', { host: f.host, login: f.login.trim() || 'admin', pass: f.pass, name: f.name.trim(), self });
       f.pass = ''; poll();
     }) }, 'ПУСК');
     const hostIn = h('input.in', { value: f.host, placeholder: '192.168.1.1', spellcheck: false });
     return [
       found === null ? pill('Ищу роутер в сети компьютера…', 'muted') : found ? pill('Keenetic найден · ' + found, 'ok') : pill('Роутер Keenetic не найден', 'warn'),
-      h('div.wiz-hint', found ? 'Введите пароль администратора роутера и нажмите «Пуск» — дальше всё сделается само.'
-        : 'Подключите компьютер к Wi-Fi или кабелем к роутеру клиента. Если адрес роутера другой — введите его ниже.'),
       h('div.wiz-card',
         h('label', 'Адрес роутера'), h('div.row', hostIn, h('button.btn.ghost', { onclick: () => find(hostIn.value.trim()) }, found === '' ? 'Искать' : 'Проверить')),
-        h('label', 'Логин роутера'), inp('login', 'admin'),
-        h('label', 'Пароль роутера'), inp('pass', '', 'password'),
-        h('label', 'Имя клиента (необязательно)'), inp('name', 'например, Иван — дача'),
-        h('div.small.muted', 'Для нового клиента. Потом его можно поменять.')),
+        self ? null : [h('label', 'Логин роутера'), inp('login', 'admin')],
+        h('label', 'Пароль от настроек роутера'), inp('pass', '', 'password'),
+        h('label', self ? 'Как вас зовут (необязательно)' : 'Имя клиента (необязательно)'), inp('name', '')),
       startBtn,
     ];
   }
 
   function running(st) {
-    return [h('div.wiz-h', 'Настраиваю роутер'),
-      h('div.wiz-hint', 'Не отключайте компьютер от сети роутера. Для нового клиента это займёт до 20 минут — окно можно свернуть.'), stepsCard(st)];
+    return [h('div.wiz-h', 'Настраиваю роутер'), pill('окно можно свернуть', 'muted'), stepsCard(st)];
   }
 
   function done(st) {
@@ -1121,16 +1131,18 @@ function setupScreen() {
     return [h('div.wiz-h', r.note ? 'Роутер подключён, но есть замечание' : 'Роутер подключён'),
       pill('адрес в VPN ' + r.ip, r.note ? 'warn' : 'ok'),
       r.note ? h('div.wiz-hint', { style: { color: 'var(--warn-text)' } }, r.note) : null,
-      r.link ? [
-        h('div.wiz-card', h('div.small.muted', r.new_client ? 'Ссылка для клиента' : 'Ссылка на бота'), h('div.wiz-link', r.link),
-          h('div.small.muted', 'По ней клиент привяжет роутер к своему Telegram и оформит подписку. Первые сутки бесплатно.')),
+      r.link && self ? [
+        h('button.wiz-go', { onclick: () => { const tg = tgLink(r.link); if (tg) location.href = tg; else openExt(r.link); } }, 'ОТКРЫТЬ TELEGRAM'),
+        h('button.btn.text', { onclick: () => copy(r.link, 'Ссылка скопирована') }, 'Скопировать ссылку'),
+      ] : r.link ? [
+        h('div.wiz-card', h('div.small.muted', r.new_client ? 'Ссылка для клиента' : 'Ссылка на бота'), h('div.wiz-link', r.link)),
         h('button.wiz-go', { onclick: () => { location.href = `tg://msg_url?url=${encodeURIComponent(r.link)}&text=${encodeURIComponent(clientMsg('').trim())}`; } }, 'ОТПРАВИТЬ В TELEGRAM'),
         h('div.row', { style: { justifyContent: 'center' } },
           h('button.btn.ghost', { onclick: () => copy(clientMsg(r.link), 'Сообщение со ссылкой скопировано') }, 'Копировать сообщение'),
           h('button.btn.ghost', { onclick: () => copy(r.link, 'Ссылка скопирована') }, 'Только ссылку')),
-      ] : h('div.wiz-hint', 'Роутер уже был клиентом NordKey — ссылка не нужна, всё работает как прежде.'),
+      ] : pill('роутер уже был подключён — всё работает', 'ok'),
       h('div.row', { style: { justifyContent: 'center' } }, h('button.btn.text', { onclick: () => find() }, 'Подключить другой роутер'),
-        h('button.btn.text', { onclick: () => { stack = []; show(); } }, 'Готово'))];
+        h('button.btn.text', { onclick: exit }, 'Готово'))];
   }
 
   function failed(st) {
@@ -1167,7 +1179,7 @@ function setupScreen() {
 
 function setupHero() {
   return h('div.wiz-hero', { role: 'button', tabindex: 0, onclick: () => go(setupScreen) }, routerArt('idle'),
-    h('div.grow', h('div.t', 'Подключить роутер'), h('div.small', 'Компьютер в сети клиента → пароль роутера → «Пуск». Ссылка для клиента — в конце.')), ico('next'));
+    h('div.grow', h('div.t', 'Подключить роутер'), h('div.small', 'Wi-Fi или кабель → пароль → Пуск')), ico('next'));
 }
 
 // крупная шапка: светящееся кольцо + заголовок и строки
@@ -1176,4 +1188,41 @@ function hero(kind, frac, value, caption, title, lines) {
   const deg = Math.round(Math.max(0.02, Math.min(1, frac)) * 360);
   return h('div.hero.' + kind, h('div.ring', { style: '--deg:' + deg + 'deg' }, h('div.in', h('b', value), caption ? h('span', caption) : null)),
     h('div.grow', h('div.ht', title), lines.filter(Boolean).map(l => h('div', l))));
+}
+
+// кольцо с оставшимися днями подписки (как в «Моей подписке»)
+function daysLeft(sub) { return sub && sub.active ? (sub.days_left || 0) : -1; }
+function daysRing(sub) {
+  const active = !!(sub && sub.active), d = active ? sub.days_left || 0 : 0;
+  const kind = !sub ? 'off' : !active ? 'bad' : d <= 3 ? 'warn' : 'ok';
+  const deg = Math.round((active ? Math.max(0.05, Math.min(1, d / 30)) : 1) * 360);
+  return h('div.dring.' + kind, { style: '--deg:' + deg + 'deg', title: sub ? (active ? `подписка: ${d} ${plural(d, 'день', 'дня', 'дней')}` : 'подписки нет') : 'нет данных' },
+    h('div.in', h('b', sub ? String(d) : '—'), sub ? h('span', 'дн.') : null));
+}
+
+// подсказки: кружок «?» и раздел «Помощь»
+const HELP = {
+  setup: ['Подключить роутер', 'Компьютер в сети роутера (Wi-Fi или кабель) → пароль от настроек роутера → «Пуск». Новый роутер настраивается до 20 минут. В конце — ссылка в Telegram, по ней роутер привязывается к владельцу.'],
+  subscription: ['Оплата и подписка', 'Оплата — в Telegram-боте NordKey, после оплаты срок здесь обновится сам. Подписка общая: роутер, телефон и этот компьютер.'],
+  family: ['Семейный доступ', 'Родные видят роутер со своего Telegram бесплатно: добавляют сайты и пишут в поддержку. Подписку оплачивает владелец.'],
+  router_web: ['Настройки роутера', 'Открываются из любого места, даже когда VPN не работает. Пароль показывается после кода из Telegram.'],
+  game: ['Игровой режим', 'Если игра через VPN идёт с большим пингом, подскажет пустить её сервер напрямую.'],
+  support: ['Поддержка', 'Опишите проблему своими словами — поддержка сразу проверит ваш роутер и ответит здесь и в Telegram.'],
+  login: ['Как войти', 'Вход — через Telegram-бота NordKey, пароль не нужен. Бот покажет три числа — нажмите то, что видите здесь. Так никто не войдёт в ваш аккаунт по чужой ссылке.'],
+  routing: ['Что идёт через VPN', 'Только то, что не открывается из России (Instagram, YouTube, ChatGPT…), и то, что настроила для вас поддержка. Игры, банки, российские сайты — напрямую, с обычной скоростью и пингом.'],
+  autopilot: ['Автопилот', 'Сам: перезапуск служб сервера, чистка диска, DNS на роутере, WARP. По кнопке: перезагрузка роутера, маршруты и DNS. Никогда: удаление, оплаты, роли.'],
+  modes: ['Режимы VPN', 'Умный — через VPN только то, что не работает напрямую. Всё через VPN — весь интернет компьютера через NordKey.'],
+  roles: ['Роли', 'Админ — всё, кроме ролей. Техник — роутеры, новые клиенты, батники. Поддержка — смотреть клиентов и отвечать.'],
+  bat: ['Батник', 'Запускается на компьютере, подключённом к Keenetic: старых клиентов переносит, новых подключает.'],
+};
+function helpDot(id) {
+  return h('button.qdot', { title: 'Подсказка', onclick: e => { e.stopPropagation(); const [t, x] = HELP[id]; dialog.open(t, h('div', { style: { lineHeight: 1.5 } }, x), [{ text: 'Понятно' }]); } }, '?');
+}
+function helpScreen() {
+  const pg = page('Помощь');
+  pg.body.append(h('div.center.col', Object.entries(HELP).map(([id, [t, x]]) => {
+    const body = h('div', { style: { display: 'none', marginTop: '8px', lineHeight: 1.5 } }, x);
+    return h('div.card.click', { onclick: () => { body.style.display = body.style.display === 'none' ? '' : 'none'; } }, h('div.t', t), body);
+  })));
+  return pg;
 }

@@ -1,5 +1,7 @@
 package ru.nordkey.app.ui.setup
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
@@ -32,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import ru.nordkey.app.net.Keenetic
-import ru.nordkey.app.ui.Nav
+import ru.nordkey.app.ui.HelpDot
 import ru.nordkey.app.util.openUrl
 import ru.nordkey.app.util.shareText
 import ru.nordkey.app.util.shareToTelegram
@@ -42,35 +44,41 @@ enum class Phase { Idle, Running, Done, Failed }
 /** Что видно на экране мастера (без логики — удобно для снимков). */
 data class WizardView(
     val phase: Phase = Phase.Idle,
-    val wifi: String? = null,          // «Wi-Fi: роутер 192.168.1.1» или null, если Wi-Fi нет
-    val routerFound: Boolean? = null,  // null — ещё ищем
+    val wifi: Boolean? = null,        // подключён ли телефон к Wi-Fi (null — ещё смотрим)
+    val router: String? = null,       // адрес найденного Keenetic
+    val searching: Boolean = true,
     val steps: Map<Step, Pair<StepStatus, String?>> = emptyMap(),
     val serverLine: String? = null,
     val result: SetupResult? = null,
     val error: String? = null,
+    val self: Boolean = false,        // клиент подключает свой роутер сам (с экрана входа)
 )
 
 fun clientMessage(link: String) = "Здравствуйте! Ваш роутер подключён к NordKey 🎉\n\n" +
-    "Откройте ссылку, чтобы привязать роутер к своему Telegram и оформить подписку — первые сутки бесплатно:\n$link"
+    "Откройте ссылку, чтобы привязать роутер к своему Telegram — первые сутки бесплатно:\n$link"
 
+/** Мастер подключения роутера. [self] — клиент сам, без входа (в конце сразу открываем Telegram). */
 @Composable
-fun SetupWizardScreen(nav: Nav) {
+fun SetupWizardScreen(onBack: () -> Unit, self: Boolean = false) {
     val ctx = LocalContext.current
     val view = LocalView.current
     val scope = rememberCoroutineScope()
-    var v by remember { mutableStateOf(WizardView()) }
+    var v by remember { mutableStateOf(WizardView(self = self)) }
     var login by remember { mutableStateOf("admin") }
     var pass by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
-    var gw by remember { mutableStateOf<String?>(null) }
+    var host by remember { mutableStateOf("") }
     var net by remember { mutableStateOf<android.net.Network?>(null) }
     var scan by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(scan) {
-        val (n, g) = Keenetic.wifi(ctx)
-        net = n; gw = g
-        v = v.copy(wifi = g?.let { "Wi-Fi подключён · роутер $it" }, routerFound = null)
-        v = v.copy(routerFound = g != null && Keenetic(g, n).probe())
+        v = v.copy(searching = true, router = null)
+        val w = Keenetic.wifi(ctx)
+        net = w.network
+        val hosts = if (host.isNotBlank()) listOf(host.trim().removePrefix("http://").trimEnd('/')) + w.candidates else w.candidates
+        val found = Keenetic.find(hosts, w.network)
+        if (found != null) host = found
+        v = v.copy(wifi = w.connected, router = found, searching = false)
     }
     DisposableEffect(v.phase) {
         view.keepScreenOn = v.phase == Phase.Running
@@ -79,13 +87,14 @@ fun SetupWizardScreen(nav: Nav) {
     BackHandler(enabled = v.phase == Phase.Running) { }
 
     SetupContent(
-        v, login, pass, name, onLogin = { login = it }, onPass = { pass = it }, onName = { name = it },
-        onBack = nav::back, onRescan = { scan++ },
+        v, login, pass, name, host, onLogin = { login = it }, onPass = { pass = it }, onName = { name = it }, onHost = { host = it },
+        onBack = onBack, onRescan = { scan++ },
+        onWifiSettings = { try { ctx.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) { } },
         onStart = {
-            val host = gw ?: return@SetupContent
+            val h = v.router ?: return@SetupContent
             v = v.copy(phase = Phase.Running, steps = emptyMap(), serverLine = null, error = null, result = null)
             scope.launch {
-                val setup = RouterSetup(Keenetic(host, net), name.trim(),
+                val setup = RouterSetup(Keenetic(h, net), name.trim(), self = self,
                                         event = { s, st, d -> v = v.copy(steps = v.steps + (s to (st to d))) },
                                         serverMsg = { m -> v = v.copy(serverLine = m) })
                 v = try {
@@ -97,39 +106,40 @@ fun SetupWizardScreen(nav: Nav) {
             }
         },
         onRetry = { v = v.copy(phase = Phase.Idle); scan++ },
+        onOpenLink = { link -> openUrl(ctx, link) },
         onShareTg = { link -> shareToTelegram(ctx, clientMessage(link)) },
-        onShare = { link -> shareText(ctx, clientMessage(link), "Отправить клиенту") },
+        onShare = { link -> shareText(ctx, clientMessage(link), "Отправить") },
         onCopy = { link -> ru.nordkey.app.ui.staff.copy(ctx, link); ru.nordkey.app.ui.toast(ctx, "Ссылка скопирована") },
-        onOpenRouter = { gw?.let { openUrl(ctx, "http://$it/") } },
+        onOpenRouter = { v.router?.let { openUrl(ctx, "http://$it/") } },
     )
 }
 
 @Composable
 fun SetupContent(
-    v: WizardView, login: String, pass: String, name: String,
-    onLogin: (String) -> Unit, onPass: (String) -> Unit, onName: (String) -> Unit,
-    onBack: () -> Unit, onRescan: () -> Unit, onStart: () -> Unit, onRetry: () -> Unit,
-    onShareTg: (String) -> Unit, onShare: (String) -> Unit, onCopy: (String) -> Unit, onOpenRouter: () -> Unit,
+    v: WizardView, login: String, pass: String, name: String, host: String,
+    onLogin: (String) -> Unit, onPass: (String) -> Unit, onName: (String) -> Unit, onHost: (String) -> Unit,
+    onBack: () -> Unit, onRescan: () -> Unit, onWifiSettings: () -> Unit, onStart: () -> Unit, onRetry: () -> Unit,
+    onOpenLink: (String) -> Unit, onShareTg: (String) -> Unit, onShare: (String) -> Unit, onCopy: (String) -> Unit, onOpenRouter: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().glowBackground().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             if (v.phase != Phase.Running) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад", tint = G.Text) }
             else Spacer(Modifier.width(48.dp))
-            Column(Modifier.weight(1f)) {
-                Text("NordKey Setup", color = G.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("подключение роутера Keenetic", color = G.Muted, fontSize = 12.sp)
-            }
+            Text("Подключить роутер", color = G.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            HelpDot("setup")
+            Spacer(Modifier.width(4.dp))
             if (v.phase == Phase.Idle) IconButton(onClick = onRescan) { Icon(Icons.Default.Refresh, "Искать роутер", tint = G.Muted) }
+            else Spacer(Modifier.width(12.dp))
         }
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp),
                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            RouterArt(when (v.phase) { Phase.Idle -> 0; Phase.Running -> 1; Phase.Done -> 2; Phase.Failed -> 3 }, Modifier.fillMaxWidth(0.78f))
+            RouterArt(when (v.phase) { Phase.Idle -> 0; Phase.Running -> 1; Phase.Done -> 2; Phase.Failed -> 3 }, Modifier.fillMaxWidth(0.62f))
             AnimatedContent(v.phase, label = "phase") { ph ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     when (ph) {
-                        Phase.Idle -> IdlePart(v, login, pass, name, onLogin, onPass, onName, onStart)
+                        Phase.Idle -> IdlePart(v, login, pass, name, host, onLogin, onPass, onName, onHost, onRescan, onWifiSettings, onStart)
                         Phase.Running -> RunningPart(v)
-                        Phase.Done -> DonePart(v, onShareTg, onShare, onCopy, onBack)
+                        Phase.Done -> DonePart(v, onOpenLink, onShareTg, onShare, onCopy, onBack)
                         Phase.Failed -> FailedPart(v, onRetry, onOpenRouter)
                     }
                 }
@@ -156,36 +166,45 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTrailingIconColor = G.Muted, unfocusedTrailingIconColor = G.Muted, focusedSupportingTextColor = G.Muted, unfocusedSupportingTextColor = G.Muted)
 
 @Composable
-private fun IdlePart(v: WizardView, login: String, pass: String, name: String, onLogin: (String) -> Unit, onPass: (String) -> Unit,
-                     onName: (String) -> Unit, onStart: () -> Unit) {
+private fun IdlePart(v: WizardView, login: String, pass: String, name: String, host: String, onLogin: (String) -> Unit, onPass: (String) -> Unit,
+                     onName: (String) -> Unit, onHost: (String) -> Unit, onRescan: () -> Unit, onWifiSettings: () -> Unit, onStart: () -> Unit) {
     when {
-        v.wifi == null && v.routerFound != null -> StatusPill("Телефон не подключён к Wi-Fi", G.Warn)
-        v.routerFound == null -> StatusPill("Ищу роутер…", G.Muted)
-        v.routerFound == true -> StatusPill(v.wifi!!.replace("Wi-Fi подключён · роутер", "Keenetic найден ·"), G.Ok)
-        else -> StatusPill("По Wi-Fi нет роутера Keenetic", G.Warn)
+        v.searching -> StatusPill("Ищу роутер…", G.Muted)
+        v.router != null -> StatusPill("Keenetic найден · ${v.router}", G.Ok)
+        v.wifi == false -> StatusPill("Нет подключения к Wi-Fi", G.Warn)
+        else -> StatusPill("Роутер Keenetic не найден", G.Warn)
     }
-    Text(if (v.routerFound == true) "Введите пароль администратора роутера и нажмите «Пуск» — дальше всё сделается само"
-         else "Подключите телефон к Wi-Fi роутера клиента и нажмите ⟳ вверху",
-         color = G.Muted, fontSize = 14.sp, textAlign = TextAlign.Center)
+    if (!v.searching && v.router == null) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(onClick = onWifiSettings, colors = ButtonDefaults.outlinedButtonColors(contentColor = G.Text)) {
+                Icon(Icons.Default.Wifi, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Wi-Fi")
+            }
+            OutlinedButton(onClick = onRescan, colors = ButtonDefaults.outlinedButtonColors(contentColor = G.Text)) {
+                Icon(Icons.Default.Refresh, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Искать снова")
+            }
+        }
+    }
     GlassCard {
         var show by remember { mutableStateOf(false) }
-        OutlinedTextField(login, onLogin, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Логин роутера") }, colors = fieldColors())
-        OutlinedTextField(pass, onPass, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Пароль роутера") }, colors = fieldColors(),
+        if (!v.searching && v.router == null)
+            OutlinedTextField(host, onHost, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Адрес роутера") },
+                              placeholder = { Text("192.168.1.1") }, colors = fieldColors(),
+                              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+        if (!v.self) OutlinedTextField(login, onLogin, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Логин роутера") }, colors = fieldColors())
+        OutlinedTextField(pass, onPass, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Пароль от настроек роутера") }, colors = fieldColors(),
                           visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
                           keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                           trailingIcon = { IconButton(onClick = { show = !show }) { Icon(if (show) Icons.Default.VisibilityOff else Icons.Default.Visibility, null) } })
-        OutlinedTextField(name, onName, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Имя клиента (необязательно)") },
-                          placeholder = { Text("например, Иван — дача") }, colors = fieldColors(),
-                          supportingText = { Text("Для нового клиента. Потом его можно поменять.") })
+        OutlinedTextField(name, onName, Modifier.fillMaxWidth(), singleLine = true,
+                          label = { Text(if (v.self) "Как вас зовут (необязательно)" else "Имя клиента (необязательно)") }, colors = fieldColors())
     }
-    GlowButton("ПУСК", enabled = v.routerFound == true && pass.isNotBlank(), modifier = Modifier.fillMaxWidth(0.7f), onClick = onStart)
+    GlowButton("ПУСК", enabled = v.router != null && pass.isNotBlank(), modifier = Modifier.fillMaxWidth(0.7f), onClick = onStart)
 }
 
 @Composable
 private fun RunningPart(v: WizardView) {
     Text("Настраиваю роутер", color = G.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-    Text("Не закрывайте приложение и не отключайтесь от Wi-Fi.\nДля нового клиента это займёт до 20 минут.",
-         color = G.Muted, fontSize = 13.sp, textAlign = TextAlign.Center)
+    StatusPill("не закрывайте приложение", G.Cyan)
     StepsCard(v)
 }
 
@@ -218,17 +237,21 @@ private fun StepsCard(v: WizardView) {
 }
 
 @Composable
-private fun DonePart(v: WizardView, onShareTg: (String) -> Unit, onShare: (String) -> Unit, onCopy: (String) -> Unit, onBack: () -> Unit) {
+private fun DonePart(v: WizardView, onOpenLink: (String) -> Unit, onShareTg: (String) -> Unit, onShare: (String) -> Unit, onCopy: (String) -> Unit,
+                     onBack: () -> Unit) {
     val r = v.result ?: return
-    Text(if (r.note == null) "Роутер подключён" else "Роутер подключён, но есть замечание", color = G.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold,
+    Text(if (r.note == null) "Роутер подключён" else "Подключён, есть замечание", color = G.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold,
          textAlign = TextAlign.Center)
     StatusPill("адрес в VPN ${r.ip}", if (r.note == null) G.Ok else G.Warn)
     r.note?.let { Text(it, color = G.Warn, fontSize = 13.sp, textAlign = TextAlign.Center) }
-    if (r.link != null) {
+    if (r.link != null && v.self) {
+        // клиент сам: сразу в Telegram — там «Запустить», и роутер привязан
+        GlowButton("ОТКРЫТЬ TELEGRAM", modifier = Modifier.fillMaxWidth(), onClick = { onOpenLink(r.link) })
+        TextButton(onClick = { onShare(r.link) }) { Text("Отправить ссылку другому", color = G.Muted) }
+    } else if (r.link != null) {
         GlassCard {
             Text(if (r.newClient) "Ссылка для клиента" else "Ссылка на бота", color = G.Muted, fontSize = 13.sp)
             Text(r.link, color = G.Cyan, fontSize = 15.sp, fontFamily = FontFamily.Monospace)
-            Text("По ней клиент привяжет роутер к своему Telegram и оформит подписку. Первые сутки бесплатно.", color = G.Muted, fontSize = 12.sp)
         }
         GlowButton("ОТПРАВИТЬ В TELEGRAM", modifier = Modifier.fillMaxWidth(), onClick = { onShareTg(r.link) })
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -240,7 +263,7 @@ private fun DonePart(v: WizardView, onShareTg: (String) -> Unit, onShare: (Strin
             }
         }
     } else {
-        Text("Роутер уже был клиентом NordKey — ссылка не нужна, всё работает как прежде.", color = G.Muted, fontSize = 14.sp, textAlign = TextAlign.Center)
+        StatusPill("роутер уже был подключён — всё работает", G.Ok)
     }
     TextButton(onClick = onBack) { Text("Готово", color = G.Muted) }
 }
@@ -266,7 +289,7 @@ fun SetupHeroCard(onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Подключить роутер", color = G.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text("Телефон в Wi-Fi клиента → пароль роутера → «Пуск». Ссылка для клиента — в конце.", color = G.Muted, fontSize = 13.sp)
+            Text("Wi-Fi → пароль → Пуск", color = G.Muted, fontSize = 13.sp)
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = G.Cyan)
     }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
@@ -44,10 +45,7 @@ fun MyRoutersScreen(me: Me, nav: Nav, withBar: Boolean) {
             LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (list.isEmpty()) item {
                     NkCard {
-                        Text("Пока нет роутеров", fontWeight = FontWeight.SemiBold)
-                        Text("Если NordKey настроил вам роутер — откройте персональную ссылку из бота. " +
-                             "Если роутер оформлен на другой аккаунт Telegram — получите там код в «🛜 Мой роутер» → «👨‍👩‍👧 Семейный доступ».",
-                             color = NK.Muted, fontSize = 14.sp)
+                        TitleHelp("Пока нет роутеров", "no_routers")
                     }
                 }
                 val mine = list.filter { it.optString("level") != "member" }
@@ -55,9 +53,7 @@ fun MyRoutersScreen(me: Me, nav: Nav, withBar: Boolean) {
                 if (mine.isNotEmpty() && fam.isNotEmpty()) item { SectionTitle("Мои") }
                 items(mine) { r -> RouterRow(r) { nav.go(Scr.Router(r.getString("ip"))) } }
                 if (fam.isNotEmpty()) item {
-                    SectionTitle("Семейный доступ")
-                    Text("Роутеры родных и близких: подписку оплачивает владелец.", color = NK.Muted, fontSize = 13.sp,
-                         modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
+                    TitleHelp("Семейный доступ", "family", Modifier.padding(top = 8.dp, start = 4.dp))
                 }
                 items(fam) { r -> RouterRow(r, extra = r.str("owner_name")) { nav.go(Scr.Router(r.getString("ip"))) } }
                 item {
@@ -84,7 +80,7 @@ fun RouterRow(r: JSONObject, extra: String? = null, onClick: () -> Unit) {
     val slow = rtt != null && rtt > 120
     NkCard(onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Dot(when { !online -> NK.Off; slow -> NK.Warn; else -> NK.Ok })
+            DaysRing(r.optJSONObject("subscription"))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(r.optString("name"), fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1)
@@ -98,8 +94,11 @@ fun RouterRow(r: JSONObject, extra: String? = null, onClick: () -> Unit) {
                 }
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(if (!online) "офлайн" else rtt?.let { "${it.toInt()} мс" } ?: "онлайн",
-                     color = when { !online -> NK.Muted; slow -> NK.WarnText; else -> NK.Text }, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Dot(when { !online -> NK.Off; slow -> NK.Warn; else -> NK.Ok }, 8)
+                    Text(if (!online) "офлайн" else rtt?.let { "${it.toInt()} мс" } ?: "онлайн",
+                         color = when { !online -> NK.Muted; slow -> NK.WarnText; else -> NK.Text }, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                }
                 r.optJSONObject("subscription")?.let { s ->
                     val dev = s.optInt("devices", 0)
                     Text((if (s.optBoolean("active")) "до ${dateRu(s.str("expires_at")).take(5)}" else "нет подписки") + (if (dev > 1) " · ×$dev" else ""),
@@ -122,10 +121,7 @@ fun DevicesScreen(nav: Nav, withBar: Boolean) {
             LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
                     NkCard(bg = NK.AccentSoft, border = NK.Accent) {
-                        Text("Как подключить", fontWeight = FontWeight.SemiBold)
-                        Text("1. Установите приложение AmneziaWG.\n2. Нажмите «+» → «Сканировать QR» и наведите на код ниже — " +
-                             "или «Поделиться файлом» и откройте его в AmneziaWG.\n3. Включите VPN.",
-                             color = NK.AccentText, fontSize = 14.sp)
+                        TitleHelp("Как подключить", "devices")
                         TextButton(onClick = { openUrl(ctx, "https://play.google.com/store/apps/details?id=org.amnezia.awg") }) {
                             Text("Скачать AmneziaWG")
                         }
@@ -133,9 +129,7 @@ fun DevicesScreen(nav: Nav, withBar: Boolean) {
                 }
                 if (list.isEmpty()) item {
                     NkCard {
-                        Text("Пока нет конфигураций для телефона или компьютера.", fontWeight = FontWeight.SemiBold)
-                        Text("Их выдаёт бот: «📄 Мой конфиг». Для роутера отдельный конфиг не нужен — он уже настроен.",
-                             color = NK.Muted, fontSize = 14.sp)
+                        TitleHelp("Пока нет конфигураций", "devices")
                     }
                 }
                 items(list) { d ->
@@ -154,7 +148,6 @@ fun DevicesScreen(nav: Nav, withBar: Boolean) {
                         if (showQr) {
                             val bmp = remember(conf) { qr(conf) }
                             Image(bmp, "QR-код конфигурации", Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)))
-                            Text("Не показывайте этот код посторонним — по нему можно подключиться к вашему VPN.", color = NK.WarnText, fontSize = 12.sp)
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = { showQr = !showQr }, modifier = Modifier.weight(1f)) { Text(if (showQr) "Скрыть QR" else "Показать QR") }
@@ -192,10 +185,9 @@ fun SubscriptionScreen(nav: Nav, withBar: Boolean) {
                         if (dev > 1) "Устройств: $dev — продление сразу за все" else null),
                 )
                 NkButton(if (active) "Продлить" else "Оформить подписку", Modifier.fillMaxWidth()) { openUrl(ctx, j.optString("pay_url")) }
-                Text("Оплата проходит в Telegram-боте NordKey. После оплаты срок здесь обновится сам.", color = NK.Muted, fontSize = 13.sp)
-                Text("Ещё одно устройство (второй телефон, компьютер, сервер) — в боте: «📄 Мой конфиг» → «➕ Добавить устройство». " +
-                     "Член семьи может видеть ваш роутер со своего Telegram бесплатно: «🛜 Мой роутер» → «👨‍👩‍👧 Семейный доступ».",
-                     color = NK.Muted, fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    HelpLink("Как оплатить", "subscription"); HelpLink("Семейный доступ", "family")
+                }
             }
         }
     }
@@ -214,7 +206,7 @@ fun SupportScreen(nav: Nav) {
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val msgs = load.data?.optJSONArray("messages").objects()
             if (msgs.isEmpty()) item {
-                Text("Опишите проблему — например «не открывается YouTube на телевизоре». Поддержка сразу проверит ваш роутер.", color = NK.Muted)
+                TitleHelp("Напишите, что не работает", "support")
             }
             items(msgs) { m ->
                 val mine = m.optString("sender") == "client"
@@ -315,6 +307,7 @@ fun MoreScreen(me: Me, nav: Nav, onLogout: () -> Unit, reloadMe: () -> Unit) {
             }
             SectionTitle("Оформление")
             ThemePicker()
+            MenuItem("Помощь", Icons.AutoMirrored.Filled.HelpOutline) { nav.go(Scr.Help) }
             MenuItem("Где выполнен вход", Icons.Default.Devices) { nav.go(Scr.Sessions) }
             MenuItem("Выйти", Icons.AutoMirrored.Filled.Logout, danger = true) { act { Api.post("/v1/auth/logout"); onLogout(); null } }
             Text("NordKey ${BuildConfig.VERSION_NAME}", color = NK.Off, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
@@ -329,17 +322,21 @@ fun MoreScreen(me: Me, nav: Nav, onLogout: () -> Unit, reloadMe: () -> Unit) {
 
 @Composable
 fun MenuItem(title: String, icon: ImageVector, danger: Boolean = false, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(NK.Surface).border(1.dp, NK.Line, RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, null, tint = if (danger) NK.Bad else NK.Muted)
-        Spacer(Modifier.width(12.dp))
-        Text(title, color = if (danger) NK.Bad else NK.Text, modifier = Modifier.weight(1f))
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = NK.Off)
+    // у каждого пункта свой цвет значка — меню читается с одного взгляда в обеих темах
+    val tint = if (danger) NK.Bad else menuTints()[(title.hashCode() and 0x7fffffff) % menuTints().size]
+    NkCard(onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(tint.copy(alpha = if (NK.dark) 0.16f else 0.12f)),
+                contentAlignment = Alignment.Center) { Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp)) }
+            Spacer(Modifier.width(12.dp))
+            Text(title, color = if (danger) NK.Bad else NK.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = NK.Off)
+        }
     }
 }
+
+private fun menuTints() = if (NK.dark) listOf(Color(0xFF5CC8FF), Color(0xFF7C9CFF), Color(0xFFB18CFF), Color(0xFF3FE0A0), Color(0xFFFFB547), Color(0xFFFF8FB1), Color(0xFF35E0FF))
+    else listOf(Color(0xFF1F6FEB), Color(0xFF4F46E5), Color(0xFF7C3AED), Color(0xFF0E9F6E), Color(0xFFD97706), Color(0xFFDB2777), Color(0xFF0891B2))
 
 
 /** Маленькая отметка семейного доступа: значок людей и подпись. */
@@ -359,8 +356,8 @@ fun RouterGroupCard(owner: String, ownerTg: Long, routers: List<JSONObject>, onO
     val sub = routers.firstNotNullOfOrNull { it.optJSONObject("subscription") }
     NkCard {
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onOwner), verticalAlignment = Alignment.CenterVertically) {
-            Avatar(owner, ownerTg, 34)
-            Spacer(Modifier.width(10.dp))
+            DaysRing(sub)
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(owner, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1)
                 Text("${routers.size} ${plural(routers.size, "роутер", "роутера", "роутеров")}" +

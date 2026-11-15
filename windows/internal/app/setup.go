@@ -13,11 +13,17 @@ import (
 // Мастер подключения роутера: ПК в сети клиента → вход в Keenetic → туннель, SSH, заявка на сервер → ссылка клиенту.
 
 // staffServer — заявки на сервер NordKey с токеном этого ПК (права проверяет сервер: «newclient»).
-type staffServer struct{ a *App }
+// public — клиент подключает свой роутер сам, без входа (как батник).
+type staffServer struct {
+	a      *App
+	public bool
+}
 
 func (s staffServer) call(method, path string, in map[string]any) (map[string]any, error) {
 	tok := s.a.o.Store.Load().Token
-	if tok == "" {
+	if s.public {
+		tok = ""
+	} else if tok == "" {
 		return nil, errors.New("войдите в аккаунт NordKey")
 	}
 	var out map[string]any
@@ -54,6 +60,7 @@ func (a *App) setupHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /local/setup/start", func(w http.ResponseWriter, r *http.Request) {
 		var b struct {
 			Host, Login, Pass, Name string
+			Self                    bool
 		}
 		if err := readJSON(r, &b); err != nil {
 			jsonErr(w, err)
@@ -72,7 +79,10 @@ func (a *App) setupHandlers(mux *http.ServeMux) {
 			jsonErr(w, errors.New("мастер уже работает"))
 			return
 		}
-		s := &keenetic.Setup{K: keenetic.New(b.Host), S: staffServer{a}, Name: strings.TrimSpace(b.Name)}
+		s := &keenetic.Setup{K: keenetic.New(b.Host), S: staffServer{a, b.Self}, Name: strings.TrimSpace(b.Name)}
+		if b.Self {
+			s.Base = "/v1/public/onboard"
+		}
 		a.setup = s
 		a.mu.Unlock()
 		a.logf("мастер: подключаю роутер %s", b.Host)
