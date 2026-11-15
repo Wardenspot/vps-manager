@@ -15,7 +15,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
@@ -89,38 +96,89 @@ fun ErrorBox(msg: String, onRetry: () -> Unit) {
     }
 }
 
+// ───────── новый дизайн: глубокий фон со свечением, «стеклянные» карточки, градиентные кнопки ─────────
+
+/** Фон всех экранов: в тёмной теме — тёмно-синий со свечением сверху, в светлой — мягкий голубоватый. */
+fun Modifier.nkBackground() = this
+    .background(if (NK.dark) Brush.verticalGradient(listOf(Color(0xFF0B1324), Color(0xFF070B14)))
+                else Brush.verticalGradient(listOf(Color(0xFFF7F9FE), Color(0xFFEEF2F9))))
+    .drawBehind {
+        val a = if (NK.dark) 0.22f else 0.10f
+        val c1 = Offset(size.width * 0.5f, 0f)
+        drawCircle(Brush.radialGradient(listOf(NK.Glow.copy(alpha = a), Color.Transparent), center = c1, radius = size.width * 0.9f),
+                   radius = size.width * 0.9f, center = c1)
+        val c2 = Offset(size.width, 0f)
+        drawCircle(Brush.radialGradient(listOf(Color(0xFF7C5CFF).copy(alpha = a * 0.7f), Color.Transparent), center = c2, radius = size.width * 0.55f),
+                   radius = size.width * 0.55f, center = c2)
+    }
+
+/** Заливка карточки: «стекло» в тёмной теме, белая с тенью — в светлой. */
+private fun Modifier.glass(shape: RoundedCornerShape, border: Color, bg: Color?): Modifier =
+    if (bg != null) this.clip(shape).background(bg).border(1.dp, border, shape)
+    else if (NK.dark) this.clip(shape)
+        .background(Brush.verticalGradient(listOf(NK.Surface2.copy(alpha = 0.88f), NK.Surface.copy(alpha = 0.88f))))
+        .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.10f), border)), shape)
+    else this.shadow(10.dp, shape, ambientColor = Color(0x1A1E3A8A), spotColor = Color(0x1A1E3A8A))
+        .clip(shape).background(NK.Surface).border(1.dp, border, shape)
+
 @Composable
 fun NkCard(modifier: Modifier = Modifier, border: Color = NK.Line, bg: Color = NK.Surface, onClick: (() -> Unit)? = null,
            content: @Composable ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(20.dp)
     Column(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(bg)
-            .border(1.dp, border, RoundedCornerShape(16.dp))
+            .glass(shape, border, bg.takeIf { it != NK.Surface })
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(14.dp),
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         content = content,
     )
 }
 
+/** Главная кнопка: светящаяся градиентная «таблетка». */
 @Composable
-fun Dot(color: Color, size: Int = 10) = Box(Modifier.size(size.dp).clip(CircleShape).background(color))
+fun NkButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, icon: ImageVector? = null, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Row(
+        modifier
+            .heightIn(min = 52.dp)
+            .alpha(if (enabled) 1f else 0.45f)
+            .drawBehind {
+                if (enabled) drawRoundRect(Brush.horizontalGradient(NK.Grad.map { it.copy(alpha = if (NK.dark) 0.40f else 0.25f) }),
+                                           topLeft = Offset(-4.dp.toPx(), 5.dp.toPx()), size = Size(size.width + 8.dp.toPx(), size.height + 2.dp.toPx()),
+                                           cornerRadius = CornerRadius(size.height))
+            }
+            .clip(shape)
+            .background(Brush.horizontalGradient(NK.Grad))
+            .border(1.dp, Color.White.copy(alpha = 0.22f), shape)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 22.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+    ) {
+        icon?.let { Icon(it, null, tint = NK.OnGrad, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)) }
+        Text(text, color = NK.OnGrad, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+/** Точка состояния; зелёная и жёлтая — с мягким свечением. */
+@Composable
+fun Dot(color: Color, size: Int = 10) = Box(Modifier.size((size + 6).dp), contentAlignment = Alignment.Center) {
+    if (color != NK.Off && color != NK.Muted) Box(Modifier.size((size + 6).dp).clip(CircleShape).background(color.copy(alpha = 0.18f)))
+    Box(Modifier.size(size.dp).clip(CircleShape).background(color))
+}
 
 @Composable
 fun Tile(label: String, value: String, modifier: Modifier = Modifier, warn: Boolean = false, ok: Boolean = false) {
     Column(
         modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (warn) NK.WarnSoft else NK.Surface)
-            .border(1.dp, if (warn) NK.WarnLine else NK.Line, RoundedCornerShape(12.dp))
-            .padding(10.dp),
+            .glass(RoundedCornerShape(16.dp), if (warn) NK.WarnLine else NK.Line, if (warn) NK.WarnSoft else null)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Text(label, color = if (warn) NK.WarnLabel else NK.Muted, fontSize = 11.sp, maxLines = 1)
         Text(value, color = when { warn -> NK.WarnText; ok -> NK.OkText; else -> NK.Text },
-             fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+             fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -132,7 +190,7 @@ fun Chip(text: String, color: Color = NK.OkText, bg: Color = NK.OkSoft) {
 
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) =
-    Text(text, color = NK.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = modifier.padding(top = 6.dp, start = 4.dp))
+    Text(text, color = NK.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = modifier.padding(top = 8.dp, start = 4.dp))
 
 @Composable
 fun Mono(text: String, color: Color = NK.Muted, size: Int = 12) =
@@ -141,21 +199,27 @@ fun Mono(text: String, color: Color = NK.Muted, size: Int = 12) =
 @Composable
 fun ActionTile(label: String, icon: ImageVector, modifier: Modifier = Modifier, primary: Boolean = false,
                risky: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(18.dp)
+    val grad = primary && enabled
     Column(
         modifier
-            .heightIn(min = 76.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (primary) NK.AccentSoft else NK.Surface)
-            .border(1.dp, when { primary -> NK.Accent; risky -> NK.WarnLine; else -> NK.Line }, RoundedCornerShape(14.dp))
+            .heightIn(min = 80.dp)
+            .then(if (grad) Modifier.clip(shape).background(Brush.linearGradient(NK.Grad)).border(1.dp, Color.White.copy(alpha = 0.22f), shape)
+                  else Modifier.glass(shape, if (risky) NK.WarnLine else NK.Line, null))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, null, tint = when { !enabled -> NK.Off; primary -> NK.Link; risky -> NK.Warn; else -> NK.Muted },
-             modifier = Modifier.size(22.dp))
+        Box(Modifier.size(34.dp).clip(RoundedCornerShape(11.dp))
+                .background(when { grad -> Color.White.copy(alpha = 0.22f); risky -> NK.Warn.copy(alpha = 0.14f); else -> NK.Link.copy(alpha = 0.12f) }),
+            contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = when { !enabled -> NK.Off; grad -> NK.OnGrad; risky -> NK.Warn; else -> NK.Link },
+                 modifier = Modifier.size(20.dp))
+        }
         Spacer(Modifier.height(6.dp))
-        Text(label, color = if (enabled) NK.Text else NK.Off, fontSize = 12.sp, lineHeight = 15.sp,
+        Text(label, color = when { !enabled -> NK.Off; grad -> NK.OnGrad; else -> NK.Text }, fontSize = 12.sp, lineHeight = 15.sp,
+             fontWeight = if (grad) FontWeight.SemiBold else FontWeight.Normal,
              textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 2)
     }
 }
@@ -167,7 +231,7 @@ fun NkTopBar(title: String, subtitle: String? = null, onBack: (() -> Unit)? = nu
     TopAppBar(
         title = {
             Column {
-                Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(title, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (subtitle != null) Text(subtitle, fontSize = 12.sp, color = NK.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         },
@@ -178,7 +242,7 @@ fun NkTopBar(title: String, subtitle: String? = null, onBack: (() -> Unit)? = nu
             actions()
             if (onRefresh != null) IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, "Обновить") }
         },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = NK.Bg, titleContentColor = NK.Text,
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, titleContentColor = NK.Text,
                                                    navigationIconContentColor = NK.Text, actionIconContentColor = NK.Text),
     )
 }
@@ -308,4 +372,54 @@ fun NkDivider() = Box(Modifier.fillMaxWidth().height(1.dp).background(NK.Divider
 fun plural(n: Int, one: String, few: String, many: String): String {
     val a = Math.abs(n) % 100; val b = a % 10
     return when { a in 11..14 -> many; b == 1 -> one; b in 2..4 -> few; else -> many }
+}
+
+/** Светящееся кольцо состояния: [fraction] — доля заполнения (0..1), внутри — крупное значение. */
+@Composable
+fun StatusRing(color: Color, fraction: Float, value: String, caption: String? = null, size: Int = 92) {
+    androidx.compose.foundation.layout.Box(Modifier.size(size.dp), contentAlignment = Alignment.Center) {
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            val w = 7.dp.toPx()
+            val inset = w / 2 + 4.dp.toPx()
+            val arc = Size(this.size.width - inset * 2, this.size.height - inset * 2)
+            val tl = Offset(inset, inset)
+            drawCircle(Brush.radialGradient(listOf(color.copy(alpha = if (NK.dark) 0.30f else 0.16f), Color.Transparent)), radius = this.size.minDimension / 2)
+            drawArc(color.copy(alpha = 0.16f), 0f, 360f, false, tl, arc, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
+            val sweep = 360f * fraction.coerceIn(0.02f, 1f)
+            drawArc(color.copy(alpha = 0.35f), -90f, sweep, false, tl, arc,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(w * 2.2f, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+            drawArc(Brush.sweepGradient(listOf(color.copy(alpha = 0.75f), color, color.copy(alpha = 0.75f))), -90f, sweep, false, tl, arc,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(w, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value, color = NK.Text, fontSize = (size / 4.6).sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+            caption?.let { Text(it, color = NK.Muted, fontSize = 10.sp, maxLines = 1) }
+        }
+    }
+}
+
+/** Крупная шапка экрана: кольцо слева, заголовок и подробности справа. */
+@Composable
+fun StatusHero(color: Color, fraction: Float, value: String, caption: String?, title: String, lines: List<String>,
+               modifier: Modifier = Modifier, extra: (@Composable ColumnScope.() -> Unit)? = null) {
+    val shape = RoundedCornerShape(24.dp)
+    Row(
+        modifier.fillMaxWidth()
+            .glass(shape, color.copy(alpha = 0.45f), null)
+            .drawBehind {
+                drawCircle(Brush.radialGradient(listOf(color.copy(alpha = if (NK.dark) 0.16f else 0.08f), Color.Transparent),
+                                                center = Offset(0f, size.height / 2), radius = size.width * 0.6f),
+                           radius = size.width * 0.6f, center = Offset(0f, size.height / 2))
+            }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StatusRing(color, fraction, value, caption)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, color = color, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            lines.forEach { Text(it, color = NK.Text, fontSize = 14.sp) }
+            extra?.invoke(this)
+        }
+    }
 }

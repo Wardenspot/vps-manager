@@ -16,6 +16,7 @@ import ru.nordkey.app.net.Api
 import ru.nordkey.app.ui.*
 import ru.nordkey.app.ui.staff.AccountScreen
 import ru.nordkey.app.ui.staff.ClientsScreen
+import ru.nordkey.app.ui.setup.*
 
 /** Снимки экранов на выдуманных данных (сервер не нужен): светлая и тёмная тема. */
 class ScreensTest {
@@ -93,7 +94,7 @@ class ScreensTest {
     private fun snap(name: String, content: @Composable () -> Unit) {
         for (dark in listOf(false, true)) {
             paparazzi.snapshot(name = name + if (dark) "_dark" else "_light") {
-                NordKeyTheme(dark = dark) { Surface(Modifier.fillMaxSize(), color = NK.Bg, contentColor = NK.Text) { content() } }
+                NordKeyTheme(dark = dark) { Surface(Modifier.fillMaxSize().nkBackground(), color = androidx.compose.ui.graphics.Color.Transparent, contentColor = NK.Text) { content() } }
             }
         }
     }
@@ -111,4 +112,19 @@ class ScreensTest {
     @Test fun myRouters() = snap("my_routers") { MyRoutersScreen(client, nav(), withBar = false) }
     @Test fun subscription() = snap("subscription") { SubscriptionScreen(nav(), withBar = false) }
     @Test fun more() = snap("more") { MoreScreen(client, nav(), {}, {}) }
+
+    private fun wizard(v: WizardView) = snap("setup_" + v.phase.name.lowercase()) {
+        SetupContent(v, "admin", if (v.phase == Phase.Idle) "secret" else "", "Иван — дача", {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+    }
+    private val wifi = "Wi-Fi подключён · роутер 192.168.1.1"
+    @Test fun setupIdle() = wizard(WizardView(wifi = wifi, routerFound = true))
+    @Test fun setupRunning() = wizard(WizardView(Phase.Running, wifi, true, mapOf(
+        Step.Login to (StepStatus.Done to "Keenetic Giga (KN-1011), 4.2.3"), Step.Ssh to (StepStatus.Done to "включён"),
+        Step.Tunnel to (StepStatus.Done to "создан Wireguard2"), Step.Server to (StepStatus.Run to "ждём сервер")),
+        serverLine = "выдан адрес 10.66.66.171, проверяю связь…"))
+    @Test fun setupDone() = wizard(WizardView(Phase.Done, wifi, true, Step.entries.associateWith { StepStatus.Done to null },
+        result = SetupResult("10.66.66.171", "https://t.me/NordKeyVPN_bot?start=r_k3Jd8sQ", true, null)))
+    @Test fun setupFailed() = wizard(WizardView(Phase.Failed, wifi, true, mapOf(Step.Login to (StepStatus.Fail to "неверный логин или пароль роутера")),
+        error = "Неверный логин или пароль роутера. Пароль — тот, что вводите в веб-интерфейсе my.keenetic.net."))
+    @Test fun dashboardHero() = snap("setup_hero") { SetupHeroCard {} }
 }

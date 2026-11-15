@@ -86,6 +86,16 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                 val online = r.optBoolean("online")
                 val rtt = r.dbl("rtt")
                 val sub = r.optJSONObject("subscription")
+                val slow = rtt != null && rtt > 120
+                StatusHero(
+                    color = when { !online -> NK.Bad; slow -> NK.Warn; else -> NK.Ok },
+                    fraction = if (!online) 1f else rtt?.let { (1f - (it.toFloat() / 300f)).coerceIn(0.15f, 1f) } ?: 1f,
+                    value = if (online) rtt?.let { "${it.toInt()}" } ?: "✓" else "×", caption = if (online && rtt != null) "мс" else null,
+                    title = when { !online -> "Нет связи"; slow -> "Медленно"; else -> "Работает" },
+                    lines = listOfNotNull(
+                        if (online) "VPN подключён · связь ${ago(r.optLong("handshake_ago"))} назад" else "Роутер не выходит на связь",
+                        sub?.let { if (it.optBoolean("active")) "Подписка до ${dateRu(it.str("expires_at"))}" else "Подписка закончилась" }),
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Tile("Туннель", if (online) ago(r.optLong("handshake_ago")) else "офлайн", Modifier.weight(1f), ok = online, warn = !online)
                     Tile("Пинг", rtt?.let { "${it.toInt()} мс" } ?: "—", Modifier.weight(1f), warn = rtt != null && rtt > 120)

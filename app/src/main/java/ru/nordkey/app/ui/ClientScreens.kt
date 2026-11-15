@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -178,18 +179,19 @@ fun SubscriptionScreen(nav: Nav, withBar: Boolean) {
             val s = j.optJSONObject("subscription")
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 val active = s?.optBoolean("active") == true
-                NkCard(bg = if (active) NK.OkSoft else NK.WarnSoft, border = if (active) NK.Ok else NK.WarnLine) {
-                    Text(if (active) "Подписка активна" else "Подписки нет", fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                         color = if (active) NK.OkText else NK.WarnText)
-                    if (s != null) Text(
-                        (if (active) "до ${dateRu(s.str("expires_at"))} · осталось ${s.optInt("days_left")} дн." else "закончилась ${dateRu(s.str("expires_at"))}") +
-                            (if (s.optBoolean("trial")) " · пробный период" else ""), color = NK.Text)
-                    val dev = s?.optInt("devices", 0) ?: 0
-                    if (dev > 1) Text("Устройств в подписке: $dev — продление сразу за все", color = NK.Text, fontSize = 14.sp)
-                }
-                Button(onClick = { openUrl(ctx, j.optString("pay_url")) }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-                    Text(if (active) "Продлить" else "Оформить подписку", fontSize = 16.sp)
-                }
+                val days = s?.optInt("days_left") ?: 0
+                val dev = s?.optInt("devices", 0) ?: 0
+                StatusHero(
+                    color = if (active) (if (days <= 3) NK.Warn else NK.Ok) else NK.Warn,
+                    fraction = if (active) (days / 30f).coerceIn(0.05f, 1f) else 0.02f,
+                    value = if (active) "$days" else "0", caption = plural(if (active) days else 0, "день", "дня", "дней"),
+                    title = if (active) "Подписка активна" else "Подписки нет",
+                    lines = listOfNotNull(
+                        s?.let { if (active) "до ${dateRu(it.str("expires_at"))}" else "закончилась ${dateRu(it.str("expires_at"))}" },
+                        if (s?.optBoolean("trial") == true) "пробный период" else null,
+                        if (dev > 1) "Устройств: $dev — продление сразу за все" else null),
+                )
+                NkButton(if (active) "Продлить" else "Оформить подписку", Modifier.fillMaxWidth()) { openUrl(ctx, j.optString("pay_url")) }
                 Text("Оплата проходит в Telegram-боте NordKey. После оплаты срок здесь обновится сам.", color = NK.Muted, fontSize = 13.sp)
                 Text("Ещё одно устройство (второй телефон, компьютер, сервер) — в боте: «📄 Мой конфиг» → «➕ Добавить устройство». " +
                      "Член семьи может видеть ваш роутер со своего Telegram бесплатно: «🛜 Мой роутер» → «👨‍👩‍👧 Семейный доступ».",
@@ -219,7 +221,7 @@ fun SupportScreen(nav: Nav) {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
                     Text(m.optString("text"), color = if (mine) Color.White else NK.Text, fontSize = 15.sp,
                          modifier = Modifier.widthIn(max = 320.dp).clip(RoundedCornerShape(14.dp))
-                             .background(if (mine) NK.Accent else NK.Surface).padding(12.dp))
+                             .background(if (mine) Brush.linearGradient(listOf(NK.Glow, Color(0xFF2E5BD8))) else Brush.linearGradient(listOf(NK.Surface2, NK.Surface))).padding(12.dp))
                 }
             }
             if (msgs.lastOrNull()?.optString("sender") == "client") item { Text("Проверяем…", color = NK.Muted) }
@@ -297,6 +299,7 @@ fun MoreScreen(me: Me, nav: Nav, onLogout: () -> Unit, reloadMe: () -> Unit) {
             if (me.staff) {
                 SectionTitle("Работа")
                 if (me.can("msg")) MenuItem("Обращения в поддержку", Icons.Default.SupportAgent) { nav.go(Scr.SupportInbox) }
+                if (me.can("newclient")) MenuItem("Подключить роутер (мастер)", Icons.Default.Router) { nav.go(Scr.Setup) }
                 if (me.can("newclient")) MenuItem("Новый клиент — ссылка на бота", Icons.Default.PersonAdd) { nav.go(Scr.NewClient) }
                 if (me.can("bat")) MenuItem("Батник для настройки роутера", Icons.Default.Description) { nav.go(Scr.Bat) }
                 if (me.can("broadcast")) MenuItem("Рассылка клиентам", Icons.Default.Campaign) { nav.go(Scr.Broadcast) }

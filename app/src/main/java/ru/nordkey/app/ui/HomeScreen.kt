@@ -12,7 +12,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,6 +46,7 @@ sealed interface Scr {
     data class Incident(val id: Long) : Scr
     data class Account(val tg: Long) : Scr
     data object SupportInbox : Scr
+    data object Setup : Scr
 }
 
 class Nav(private val stack: SnapshotStateList<Scr>) {
@@ -67,7 +75,7 @@ fun HomeScreen(onLogout: () -> Unit) {
     val nav = remember { Nav(stack) }
     BackHandler(enabled = stack.isNotEmpty()) { nav.back() }
 
-    Box(Modifier.fillMaxSize().background(NK.Bg)) {
+    Box(Modifier.fillMaxSize().nkBackground()) {
         Loaded(meLoad) { json ->
             val me = remember(json) { Me(json) }
             val top = stack.lastOrNull()
@@ -88,6 +96,7 @@ fun HomeScreen(onLogout: () -> Unit) {
                     is Scr.Incident -> IncidentScreen(top.id, me, nav)
                     is Scr.Account -> AccountScreen(top.tg, me, nav)
                     Scr.SupportInbox -> SupportInboxScreen(nav)
+                    Scr.Setup -> ru.nordkey.app.ui.setup.SetupWizardScreen(nav)
                 }
             } else {
                 Tabs(me, json, nav, onLogout, meLoad.reload)
@@ -114,23 +123,40 @@ private fun Tabs(me: Me, json: JSONObject, nav: Nav, onLogout: () -> Unit, reloa
     var sel by rememberSaveable { mutableIntStateOf(0) }
     if (sel >= tabs.size) sel = 0
     Scaffold(
-        containerColor = NK.Bg,
+        containerColor = Color.Transparent,
         topBar = { UpdateBanner(json) },
-        bottomBar = {
-            NavigationBar(containerColor = NK.Bar) {
-                tabs.forEachIndexed { i, t ->
-                    NavigationBarItem(
-                        selected = sel == i, onClick = { sel = i },
-                        icon = { Icon(t.icon, null) }, label = { Text(t.title, fontSize = 11.sp) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = NK.Link, selectedTextColor = NK.Link, indicatorColor = NK.AccentSoft,
-                            unselectedIconColor = NK.Muted, unselectedTextColor = NK.Muted),
-                    )
-                }
-            }
-        },
+        bottomBar = { NkTabBar(tabs, sel) { sel = it } },
     ) { pad ->
         Box(Modifier.padding(pad)) { tabs[sel].content(nav, me) }
+    }
+}
+
+/** Нижняя панель вкладок: «плавающая» стеклянная, выбранная вкладка — со светящейся подложкой. */
+@Composable
+private fun NkTabBar(tabs: List<Tab>, sel: Int, onSelect: (Int) -> Unit) {
+    val shape = RoundedCornerShape(26.dp)
+    Row(
+        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp)
+            .shadow(if (NK.dark) 0.dp else 14.dp, shape, ambientColor = Color(0x261E3A8A), spotColor = Color(0x261E3A8A))
+            .clip(shape)
+            .background(if (NK.dark) Brush.verticalGradient(listOf(Color(0xF0182339), Color(0xF00E1628))) else Brush.verticalGradient(listOf(Color.White, Color.White)))
+            .border(1.dp, if (NK.dark) Color.White.copy(alpha = 0.08f) else NK.Line, shape)
+            .padding(6.dp),
+        horizontalArrangement = Arrangement.SpaceAround,
+    ) {
+        tabs.forEachIndexed { i, t ->
+            val on = i == sel
+            Column(
+                Modifier.weight(1f).clip(RoundedCornerShape(20.dp))
+                    .then(if (on) Modifier.background(Brush.verticalGradient(listOf(NK.Glow.copy(alpha = if (NK.dark) 0.30f else 0.14f), NK.Cyan.copy(alpha = if (NK.dark) 0.12f else 0.06f)))) else Modifier)
+                    .clickable { onSelect(i) }.padding(vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(t.icon, t.title, tint = if (on) NK.Link else NK.Muted, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.height(2.dp))
+                Text(t.title, fontSize = 11.sp, color = if (on) NK.Link else NK.Muted, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
+            }
+        }
     }
 }
 
