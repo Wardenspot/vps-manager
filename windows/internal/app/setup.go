@@ -79,7 +79,11 @@ func (a *App) setupHandlers(mux *http.ServeMux) {
 			jsonErr(w, errors.New("мастер уже работает"))
 			return
 		}
-		s := &keenetic.Setup{K: keenetic.New(b.Host), S: staffServer{a, b.Self}, Name: strings.TrimSpace(b.Name)}
+		k := keenetic.New(b.Host)
+		pctx, pcancel := context.WithTimeout(r.Context(), 6*time.Second)
+		k.Probe(pctx) // узнаём, http или https
+		pcancel()
+		s := &keenetic.Setup{K: k, S: staffServer{a, b.Self}, Name: strings.TrimSpace(b.Name)}
 		if b.Self {
 			s.Base = "/v1/public/onboard"
 		}

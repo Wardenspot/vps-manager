@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -354,20 +355,32 @@ fun FamilyMark(text: String) {
 @Composable
 fun RouterGroupCard(owner: String, ownerTg: Long, routers: List<JSONObject>, onOwner: () -> Unit, onRouter: (String) -> Unit) {
     val sub = routers.firstNotNullOfOrNull { it.optJSONObject("subscription") }
+    // свёрнута по умолчанию: одна строка как у обычного клиента, роутеры — по нажатию
+    var open by rememberSaveable(ownerTg) { mutableStateOf(false) }
+    val on = routers.count { it.optBoolean("online") }
+    val worst = routers.mapNotNull { r -> r.dbl("rtt")?.takeIf { r.optBoolean("online") } }.maxOrNull()
     NkCard {
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onOwner), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { open = !open }, verticalAlignment = Alignment.CenterVertically) {
             DaysRing(sub)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(owner, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1)
                 Text("${routers.size} ${plural(routers.size, "роутер", "роутера", "роутеров")}" +
-                     (sub?.let { s -> " · " + (if (s.optBoolean("active")) "подписка до ${dateRu(s.str("expires_at")).take(5)}" else "нет подписки") +
-                         (s.optDouble("price_mult", 1.0).takeIf { it != 1.0 }?.let { " · ×${multStr(it)}" } ?: "") } ?: ""),
-                     color = if (sub?.optBoolean("active") == false) NK.WarnText else NK.Muted, fontSize = 12.sp, maxLines = 1)
+                     (sub?.optDouble("price_mult", 1.0)?.takeIf { it != 1.0 }?.let { " · ×${multStr(it)}" } ?: ""),
+                     color = NK.Muted, fontSize = 12.sp, maxLines = 1)
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = NK.Off)
+            Column(horizontalAlignment = Alignment.End) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Dot(when { on == 0 -> NK.Off; on < routers.size || (worst ?: 0.0) > 120 -> NK.Warn; else -> NK.Ok }, 8)
+                    Text(if (on == routers.size) worst?.let { "${it.toInt()} мс" } ?: "онлайн" else "$on из ${routers.size}",
+                         color = if (on < routers.size) NK.WarnText else NK.Text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                }
+                sub?.let { s -> Text(if (s.optBoolean("active")) "до ${dateRu(s.str("expires_at")).take(5)}" else "нет подписки",
+                                     color = if (s.optBoolean("active")) NK.Muted else NK.WarnText, fontSize = 12.sp) }
+            }
+            Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, if (open) "Свернуть" else "Развернуть", tint = NK.Muted)
         }
-        routers.forEach { r ->
+        if (open) routers.forEach { r ->
             NkDivider()
             val online = r.optBoolean("online"); val rtt = r.dbl("rtt"); val slow = rtt != null && rtt > 120
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onRouter(r.getString("ip")) }.padding(vertical = 4.dp),
@@ -384,6 +397,16 @@ fun RouterGroupCard(owner: String, ownerTg: Long, routers: List<JSONObject>, onO
                 }
                 Text(if (!online) "офлайн" else rtt?.let { "${it.toInt()} мс" } ?: "онлайн",
                      color = when { !online -> NK.Muted; slow -> NK.WarnText; else -> NK.Text }, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
+        }
+        if (open) {
+            NkDivider()
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onOwner).padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Person, null, tint = NK.Link, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Аккаунт и подписка", color = NK.Link, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = NK.Off)
             }
         }
     }

@@ -114,10 +114,11 @@ class ScreensTest {
     @Test fun more() = snap("more") { MoreScreen(client, nav(), {}, {}) }
 
     private fun wizard(v: WizardView, tag: String = v.phase.name.lowercase()) = snap("setup_$tag") {
-        SetupContent(v, "admin", if (v.phase == Phase.Idle) "secret" else "", "Иван — дача", "", {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+        SetupContent(v, "admin", if (v.phase == Phase.Idle) "secret" else "", "Иван — дача", "", {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
     }
     @Test fun setupIdle() = wizard(WizardView(wifi = true, router = "192.168.1.1", searching = false))
-    @Test fun setupNotFound() = wizard(WizardView(wifi = false, router = null, searching = false), "notfound")
+    @Test fun setupNotFound() = wizard(WizardView(wifi = true, router = null, searching = false, vpn = true,
+        tried = listOf("192.168.1.1 — доступ закрыт (VPN?)", "my.keenetic.net — такого адреса нет")), "notfound")
     @Test fun setupSelf() = wizard(WizardView(wifi = true, router = "192.168.1.1", searching = false, self = true), "self")
     @Test fun setupRunning() = wizard(WizardView(Phase.Running, true, "192.168.1.1", false, mapOf(
         Step.Login to (StepStatus.Done to "Keenetic Giga (KN-1011), 4.2.3"), Step.Ssh to (StepStatus.Done to "включён"),

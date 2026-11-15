@@ -127,6 +127,7 @@ fun ClientsScreen(me: Me, nav: Nav) {
                     "problems" -> c.optBoolean("online") && (c.dbl("rtt") ?: 0.0) > 120 || c.optJSONObject("subscription")?.optBoolean("active") == false
                     "offline" -> !c.optBoolean("online") && c.optBoolean("migrated")
                     "old" -> !c.optBoolean("migrated")
+                    "soon" -> daysLeft(c.optJSONObject("subscription")) in 0..3
                     else -> true
                 }
                 okQ && okF
@@ -137,15 +138,20 @@ fun ClientsScreen(me: Me, nav: Nav) {
                 Row(Modifier.padding(vertical = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     fun count(f: String) = all.count { c -> when (f) {
                         "problems" -> c.optBoolean("online") && (c.dbl("rtt") ?: 0.0) > 120 || c.optJSONObject("subscription")?.optBoolean("active") == false
-                        "offline" -> !c.optBoolean("online") && c.optBoolean("migrated"); "old" -> !c.optBoolean("migrated"); else -> true } }
-                    listOf("all" to "Все", "problems" to "Проблемы", "offline" to "Офлайн", "old" to "На старом").forEach { (k, t) ->
-                        FilterChip(selected = filter == k, onClick = { filter = k }, label = { Text("$t ${count(k)}", fontSize = 12.sp) })
+                        "offline" -> !c.optBoolean("online") && c.optBoolean("migrated"); "old" -> !c.optBoolean("migrated")
+                        "soon" -> daysLeft(c.optJSONObject("subscription")) in 0..3; else -> true } }
+                    listOf("all" to "Все", "soon" to "Скоро конец", "problems" to "Проблемы", "offline" to "Офлайн", "old" to "На старом").forEach { (k, t) ->
+                        if (k == "all" || k == filter || count(k) > 0)
+                            FilterChip(selected = filter == k, onClick = { filter = k }, label = { Text("$t ${count(k)}", fontSize = 12.sp) })
                     }
-                    Spacer(Modifier.width(4.dp))
-                    // сортировка: меньше всего дней подписки — сверху, или по имени
-                    AssistChip(onClick = { sort = when (sort) { "days" -> "days_desc"; "days_desc" -> "name"; else -> "days" } },
-                               leadingIcon = { Icon(Icons.Default.SwapVert, null, Modifier.size(16.dp)) },
-                               label = { Text(when (sort) { "days" -> "Дни ↑"; "days_desc" -> "Дни ↓"; else -> "Имя" }, fontSize = 12.sp) })
+                }
+                // сколько показано и сортировка — всегда на виду
+                Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${shown.size} ${plural(shown.size, "роутер", "роутера", "роутеров")}", color = NK.Muted, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { sort = when (sort) { "days" -> "days_desc"; "days_desc" -> "name"; else -> "days" } }) {
+                        Icon(Icons.Default.SwapVert, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp))
+                        Text(when (sort) { "days" -> "Меньше дней сверху"; "days_desc" -> "Больше дней сверху"; else -> "По имени" }, fontSize = 13.sp)
+                    }
                 }
             }
             var accounts by remember { mutableStateOf<List<JSONObject>>(emptyList()) }

@@ -52,6 +52,8 @@ data class WizardView(
     val result: SetupResult? = null,
     val error: String? = null,
     val self: Boolean = false,        // клиент подключает свой роутер сам (с экрана входа)
+    val vpn: Boolean = false,         // на телефоне включён VPN
+    val tried: List<String> = emptyList(),  // что проверили и что ответило
 )
 
 fun clientMessage(link: String) = "Здравствуйте! Ваш роутер подключён к NordKey 🎉\n\n" +
@@ -69,6 +71,7 @@ fun SetupWizardScreen(onBack: () -> Unit, self: Boolean = false) {
     var name by remember { mutableStateOf("") }
     var host by remember { mutableStateOf("") }
     var net by remember { mutableStateOf<android.net.Network?>(null) }
+    var found by remember { mutableStateOf<Keenetic.Companion.Found?>(null) }
     var scan by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(scan) {
@@ -76,9 +79,10 @@ fun SetupWizardScreen(onBack: () -> Unit, self: Boolean = false) {
         val w = Keenetic.wifi(ctx)
         net = w.network
         val hosts = if (host.isNotBlank()) listOf(host.trim().removePrefix("http://").trimEnd('/')) + w.candidates else w.candidates
-        val found = Keenetic.find(hosts, w.network)
-        if (found != null) host = found
-        v = v.copy(wifi = w.connected, router = found, searching = false)
+        val (f, tried) = Keenetic.find(hosts, w.network)
+        found = f
+        if (f != null) host = f.host
+        v = v.copy(wifi = w.connected, router = f?.host, searching = false, vpn = w.vpn, tried = tried)
     }
     DisposableEffect(v.phase) {
         view.keepScreenOn = v.phase == Phase.Running
@@ -90,11 +94,14 @@ fun SetupWizardScreen(onBack: () -> Unit, self: Boolean = false) {
         v, login, pass, name, host, onLogin = { login = it }, onPass = { pass = it }, onName = { name = it }, onHost = { host = it },
         onBack = onBack, onRescan = { scan++ },
         onWifiSettings = { try { ctx.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) { } },
+        onVpnSettings = { try { ctx.startActivity(Intent(Settings.ACTION_VPN_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) { } },
         onStart = {
             val h = v.router ?: return@SetupContent
             v = v.copy(phase = Phase.Running, steps = emptyMap(), serverLine = null, error = null, result = null)
             scope.launch {
-                val setup = RouterSetup(Keenetic(h, net), name.trim(), self = self,
+                val f = found
+                val k = Keenetic(h, if (f?.bound == false) null else net).apply { if (f != null) scheme = f.scheme }
+                val setup = RouterSetup(k, name.trim(), self = self,
                                         event = { s, st, d -> v = v.copy(steps = v.steps + (s to (st to d))) },
                                         serverMsg = { m -> v = v.copy(serverLine = m) })
                 v = try {
@@ -118,7 +125,7 @@ fun SetupWizardScreen(onBack: () -> Unit, self: Boolean = false) {
 fun SetupContent(
     v: WizardView, login: String, pass: String, name: String, host: String,
     onLogin: (String) -> Unit, onPass: (String) -> Unit, onName: (String) -> Unit, onHost: (String) -> Unit,
-    onBack: () -> Unit, onRescan: () -> Unit, onWifiSettings: () -> Unit, onStart: () -> Unit, onRetry: () -> Unit,
+    onBack: () -> Unit, onRescan: () -> Unit, onWifiSettings: () -> Unit, onVpnSettings: () -> Unit, onStart: () -> Unit, onRetry: () -> Unit,
     onOpenLink: (String) -> Unit, onShareTg: (String) -> Unit, onShare: (String) -> Unit, onCopy: (String) -> Unit, onOpenRouter: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().glowBackground().statusBarsPadding()) {
@@ -137,7 +144,7 @@ fun SetupContent(
             AnimatedContent(v.phase, label = "phase") { ph ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     when (ph) {
-                        Phase.Idle -> IdlePart(v, login, pass, name, host, onLogin, onPass, onName, onHost, onRescan, onWifiSettings, onStart)
+                        Phase.Idle -> IdlePart(v, login, pass, name, host, onLogin, onPass, onName, onHost, onRescan, onWifiSettings, onVpnSettings, onStart)
                         Phase.Running -> RunningPart(v)
                         Phase.Done -> DonePart(v, onOpenLink, onShareTg, onShare, onCopy, onBack)
                         Phase.Failed -> FailedPart(v, onRetry, onOpenRouter)
@@ -167,22 +174,32 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
 
 @Composable
 private fun IdlePart(v: WizardView, login: String, pass: String, name: String, host: String, onLogin: (String) -> Unit, onPass: (String) -> Unit,
-                     onName: (String) -> Unit, onHost: (String) -> Unit, onRescan: () -> Unit, onWifiSettings: () -> Unit, onStart: () -> Unit) {
+                     onName: (String) -> Unit, onHost: (String) -> Unit, onRescan: () -> Unit, onWifiSettings: () -> Unit, onVpnSettings: () -> Unit,
+                     onStart: () -> Unit) {
     when {
         v.searching -> StatusPill("Ищу роутер…", G.Muted)
-        v.router != null -> StatusPill("Keenetic найден · ${v.router}", G.Ok)
+        v.router != null -> StatusPill("Роутер найден · ${v.router}", G.Ok)
         v.wifi == false -> StatusPill("Нет подключения к Wi-Fi", G.Warn)
-        else -> StatusPill("Роутер Keenetic не найден", G.Warn)
+        v.vpn -> StatusPill("Выключите VPN на телефоне", G.Warn)
+        else -> StatusPill("Роутер не найден", G.Warn)
     }
     if (!v.searching && v.router == null) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedButton(onClick = onWifiSettings, colors = ButtonDefaults.outlinedButtonColors(contentColor = G.Text)) {
+            if (v.vpn) OutlinedButton(onClick = onVpnSettings, colors = ButtonDefaults.outlinedButtonColors(contentColor = G.Warn)) {
+                Icon(Icons.Default.VpnKey, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("VPN")
+            }
+            else OutlinedButton(onClick = onWifiSettings, colors = ButtonDefaults.outlinedButtonColors(contentColor = G.Text)) {
                 Icon(Icons.Default.Wifi, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Wi-Fi")
             }
             OutlinedButton(onClick = onRescan, colors = ButtonDefaults.outlinedButtonColors(contentColor = G.Text)) {
                 Icon(Icons.Default.Refresh, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Искать снова")
             }
         }
+    }
+    if (!v.searching && v.router == null && v.tried.isNotEmpty()) {
+        var open by remember { mutableStateOf(false) }
+        TextButton(onClick = { open = !open }) { Text(if (open) "Скрыть, что проверял" else "Что проверял", color = G.Muted, fontSize = 13.sp) }
+        if (open) GlassCard { v.tried.forEach { Text(it, color = G.Muted, fontSize = 12.sp, fontFamily = FontFamily.Monospace) } }
     }
     GlassCard {
         var show by remember { mutableStateOf(false) }

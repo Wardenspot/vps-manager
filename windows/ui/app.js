@@ -82,6 +82,8 @@ const P = {
   add: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
   next: 'M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z',
   sort: 'M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z',
+  more: 'M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z',
+  less: 'M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z',
   help: 'M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z',
   support: 'M21 12.22C21 6.73 16.74 3 12 3c-4.69 0-9 3.65-9 9.28-.6.34-1 .98-1 1.72v2c0 1.1.9 2 2 2h1v-6.1c0-3.87 3.13-7 7-7s7 3.13 7 7V19h-8v2h8c1.1 0 2-.9 2-2v-1.22c.59-.31 1-.92 1-1.64v-2.3c0-.7-.41-1.31-1-1.62z',
   devices: 'M4 6h18V4H4c-1.1 0-2 .9-2 2v11H0v3h14v-3H4V6zm19 2h-6c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1zm-1 9h-4v-7h4v7z',
@@ -762,18 +764,29 @@ function clientsScreen() {
   const list = h('div.col'), found = h('div.col'), chips = h('div.seg');
   const inp = h('input.in', { placeholder: 'Имя, IP или @ник', spellcheck: false });
   const problem = c => (c.online && (c.rtt || 0) > 120) || (c.subscription && c.subscription.active === false);
-  const F = { all: () => true, problems: problem, offline: c => !c.online && c.migrated, old: c => !c.migrated };
+  const F = { all: () => true, soon: c => { const d = daysLeft(c.subscription); return d >= 0 && d <= 3; }, problems: problem, offline: c => !c.online && c.migrated, old: c => !c.migrated };
+  const info = h('div.row.small.muted', { style: { justifyContent: 'space-between' } });
   const paint = () => {
-    chips.replaceChildren(...[['all', 'Все'], ['problems', 'Проблемы'], ['offline', 'Офлайн'], ['old', 'На старом']].map(([k, t]) =>
-      h('button' + (filter === k ? '.on' : ''), { onclick: () => { filter = k; paint(); } }, `${t} ${all.filter(F[k]).length}`)),
-      h('button', { title: 'Сортировка', onclick: () => { sort = { days: 'days_desc', days_desc: 'name', name: 'days' }[sort]; paint(); } },
-        ico('sort'), { days: ' Дни ↑', days_desc: ' Дни ↓', name: ' Имя' }[sort]));
+    chips.replaceChildren(...[['all', 'Все'], ['soon', 'Скоро конец'], ['problems', 'Проблемы'], ['offline', 'Офлайн'], ['old', 'На старом']]
+      .filter(([k]) => k === 'all' || k === filter || all.filter(F[k]).length)
+      .map(([k, t]) => h('button' + (filter === k ? '.on' : ''), { onclick: () => { filter = k; paint(); } }, `${t} ${all.filter(F[k]).length}`)));
     const ql = q.toLowerCase();
     const shown = all.filter(c => (!q || ['name', 'ip', 'tg_name'].some(k => String(c[k] || '').toLowerCase().includes(ql))) && F[filter](c));
     const dl = c => daysLeft(c.subscription);
-    shown.sort(sort === 'days' ? (a, b) => dl(a) - dl(b) : sort === 'days_desc' ? (a, b) => dl(b) - dl(a)
+    shown.sort(sort === 'days' ? (a, b) => dl(a) - dl(b) || String(a.owner_tg).localeCompare(String(b.owner_tg)) : sort === 'days_desc' ? (a, b) => dl(b) - dl(a) || String(a.owner_tg).localeCompare(String(b.owner_tg))
       : (a, b) => String(a.owner_name || a.name || '').localeCompare(String(b.owner_name || b.name || ''), 'ru'));
-    list.replaceChildren(...shown.map(c => routerRow(c, null, () => go(routerScreen, c.ip))));
+    // несколько роутеров у одного клиента — одной раскрывающейся карточкой
+    const groups = [];
+    const byOwner = {};
+    for (const c of shown) {
+      const k = c.owner_tg > 0 ? 'o' + c.owner_tg : c.ip;
+      if (!byOwner[k]) { byOwner[k] = []; groups.push(byOwner[k]); }
+      byOwner[k].push(c);
+    }
+    info.replaceChildren(h('span', `${shown.length} ${plural(shown.length, 'роутер', 'роутера', 'роутеров')}`),
+      h('button.btn.text', { onclick: () => { sort = { days: 'days_desc', days_desc: 'name', name: 'days' }[sort]; paint(); } },
+        ico('sort'), { days: ' Меньше дней сверху', days_desc: ' Больше дней сверху', name: ' По имени' }[sort]));
+    list.replaceChildren(...groups.map(g => g.length > 1 && g[0].owner_tg > 0 ? groupCard(g) : routerRow(g[0], null, () => go(routerScreen, g[0].ip))));
   };
   inp.addEventListener('input', () => {
     q = inp.value.trim(); paint();
@@ -789,7 +802,7 @@ function clientsScreen() {
     }, 400);
   });
   const run = () => load(list, () => api.get('/v1/staff/clients'), j => { all = arr(j.clients); paint(); return [...list.childNodes]; });
-  pg.body.append(h('div.center.col', inp, chips, list, found));
+  pg.body.append(h('div.center.col', inp, chips, info, list, found));
   run();
   return pg;
 }
@@ -1225,4 +1238,28 @@ function helpScreen() {
     return h('div.card.click', { onclick: () => { body.style.display = body.style.display === 'none' ? '' : 'none'; } }, h('div.t', t), body);
   })));
   return pg;
+}
+
+// клиент с несколькими роутерами: свёрнута, по нажатию — роутеры и ссылка на аккаунт
+const OPEN_GROUPS = new Set();
+function groupCard(g) {
+  const key = g[0].owner_tg, s = g.find(c => c.subscription)?.subscription;
+  const on = g.filter(c => c.online).length, worst = Math.max(0, ...g.filter(c => c.online && c.rtt != null).map(c => c.rtt));
+  const body = h('div.col', { style: { display: OPEN_GROUPS.has(key) ? '' : 'none', marginTop: '10px', gap: '6px' } },
+    g.map(c => h('div.row.click', { style: { padding: '6px 4px', borderTop: '1px solid var(--line)' }, onclick: e => { e.stopPropagation(); go(routerScreen, c.ip); } },
+      h('span.dot', { style: { background: !c.online ? 'var(--off)' : c.rtt > 120 ? 'var(--warn)' : 'var(--ok)' } }),
+      h('div.grow', h('div', c.name || c.ip), h('div.small.muted.mono', (c.ip || '').replace('10.66.66.', ''))),
+      h('div.small', !c.online ? 'офлайн' : c.rtt != null ? Math.round(c.rtt) + ' мс' : 'онлайн'))),
+    h('button.btn.text', { onclick: e => { e.stopPropagation(); go(accountScreen, key); } }, ico('person'), ' Аккаунт и подписка'));
+  const chev = h('span', ico(OPEN_GROUPS.has(key) ? 'less' : 'more'));
+  const card = h('div.card.click', { onclick: () => {
+    if (OPEN_GROUPS.has(key)) OPEN_GROUPS.delete(key); else OPEN_GROUPS.add(key);
+    body.style.display = OPEN_GROUPS.has(key) ? '' : 'none'; chev.replaceChildren(ico(OPEN_GROUPS.has(key) ? 'less' : 'more'));
+  } }, h('div.row', daysRing(s),
+    h('div.grow', h('div.t', g[0].owner_name || g[0].tg_name || 'ID ' + key), h('div.small.muted', `${g.length} ${plural(g.length, 'роутер', 'роутера', 'роутеров')}`)),
+    h('div', { style: { textAlign: 'right' } },
+      h('div.t', { style: { color: on < g.length ? 'var(--warn-text)' : '' } }, on === g.length ? (worst ? Math.round(worst) + ' мс' : 'онлайн') : `${on} из ${g.length}`),
+      s ? h('div.small', { style: { color: s.active ? 'var(--muted)' : 'var(--warn-text)' } }, s.active ? 'до ' + dateRu(s.expires_at).slice(0, 5) : 'нет подписки') : null),
+    chev), body);
+  return card;
 }
