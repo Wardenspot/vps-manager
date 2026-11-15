@@ -224,3 +224,33 @@ func TestProbeAndFind(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestPublicBase(t *testing.T) {
+	f := &fakeRouter{pass: "pw", ssh: true, cfg: cfgOther}
+	srv := &pathServer{fakeServer: &fakeServer{}}
+	s := start(t, f, nil)
+	s.S, s.Base = srv, "/v1/public/onboard"
+	s.Run("admin", "pw")
+	if p := s.Snapshot(); p.Phase != "done" {
+		t.Fatalf("%+v", p)
+	}
+	for _, x := range srv.paths {
+		if !strings.HasPrefix(x, "/v1/public/onboard") {
+			t.Fatalf("заявка не туда: %s", x)
+		}
+	}
+}
+
+type pathServer struct {
+	*fakeServer
+	paths []string
+}
+
+func (p *pathServer) Post(path string, in map[string]any) (map[string]any, error) {
+	p.paths = append(p.paths, path)
+	return p.fakeServer.Post(path, in)
+}
+func (p *pathServer) Get(path string) (map[string]any, error) {
+	p.paths = append(p.paths, path)
+	return p.fakeServer.Get(path)
+}

@@ -65,6 +65,7 @@ type Setup struct {
 	Name   string        // имя нового клиента
 	Poll   time.Duration // как часто спрашивать сервер (тесты ставят меньше)
 	Server string        // адрес сервера для туннеля
+	Base   string        // адрес заявок: /v1/staff/onboard (сотрудник) или /v1/public/onboard (клиент сам)
 
 	mu     sync.Mutex
 	p      Progress
@@ -177,7 +178,7 @@ func (s *Setup) waitServer(run, want string, d time.Duration, allowMove bool) (m
 	last := ""
 	until := time.Now().Add(d)
 	for time.Now().Before(until) {
-		if st, err := s.S.Get("/v1/staff/onboard/status?run=" + run); err == nil && str(st, "run") == run {
+		if st, err := s.S.Get(s.Base + "/status?run=" + run); err == nil && str(st, "run") == run {
 			if m := str(st, "msg"); m != "" && m != last {
 				s.line(m)
 				last = m
@@ -218,6 +219,9 @@ func (s *Setup) run(login, pass string) (*Result, error) {
 	}
 	if s.Server == "" {
 		s.Server = Known[0]
+	}
+	if s.Base == "" {
+		s.Base = "/v1/staff/onboard"
 	}
 	s.ngPass = Password(24)
 	endpoint := s.Server + ":35180"
@@ -266,7 +270,7 @@ func (s *Setup) run(login, pass string) (*Result, error) {
 		s.step("server", "run", "")
 		si, _ := k.RCI("show interface " + wif)
 		mykey := ownKey(si)
-		r, err := s.S.Post("/v1/staff/onboard", map[string]any{"step": "reg", "ip": ip, "key": mykey, "pass": s.ngPass})
+		r, err := s.S.Post(s.Base, map[string]any{"step": "reg", "ip": ip, "key": mykey, "pass": s.ngPass})
 		if err != nil {
 			return nil, s.fail("server", err)
 		}
@@ -309,7 +313,7 @@ func (s *Setup) run(login, pass string) (*Result, error) {
 			_, _ = k.RCI("no interface "+wif, "system configuration save")
 			return nil, s.fail("server", fmt.Errorf("%v — роутер вернул как было", e))
 		}
-		r, err := s.S.Post("/v1/staff/onboard", map[string]any{"step": "new", "key": pk, "pass": s.ngPass, "serial": ser[1], "mac": mac, "name": s.Name})
+		r, err := s.S.Post(s.Base, map[string]any{"step": "new", "key": pk, "pass": s.ngPass, "serial": ser[1], "mac": mac, "name": s.Name})
 		if err != nil {
 			return undo(err)
 		}
@@ -374,7 +378,7 @@ func (s *Setup) run(login, pass string) (*Result, error) {
 	if newClient {
 		wait = 1500 * time.Second
 	}
-	if _, err := s.S.Post("/v1/staff/onboard", map[string]any{"step": "done", "ip": ip, "run": run}); err != nil {
+	if _, err := s.S.Post(s.Base, map[string]any{"step": "done", "ip": ip, "run": run}); err != nil {
 		return nil, s.fail("finish", err)
 	}
 	st, err := s.waitServer(run, "ok", wait, true)
@@ -387,7 +391,7 @@ func (s *Setup) run(login, pass string) (*Result, error) {
 			return nil, s.fail("finish", err)
 		}
 		s.line("роутер уже был клиентом NordKey — вернул ему прежний адрес " + ip)
-		if _, err := s.S.Post("/v1/staff/onboard", map[string]any{"step": "done", "ip": ip, "run": run}); err != nil {
+		if _, err := s.S.Post(s.Base, map[string]any{"step": "done", "ip": ip, "run": run}); err != nil {
 			return nil, s.fail("finish", err)
 		}
 		if st, err = s.waitServer(run, "ok", 1500*time.Second, false); err != nil {

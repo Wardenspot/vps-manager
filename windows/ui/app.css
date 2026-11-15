@@ -298,3 +298,16 @@ input[type=checkbox]:checked { background: var(--grad); }
 .hero .ring b { font-size: 22px; font-weight: 800; line-height: 1.1; } .hero .ring span { color: var(--muted); font-size: 11px; }
 .hero .ht { color: var(--c); font-size: 20px; font-weight: 800; margin-bottom: 2px; }
 .hero .grow { flex: 1; min-width: 0; }
+.dring { --c: var(--ok); width: 46px; height: 46px; border-radius: 50%; flex: none; position: relative; display: grid; place-items: center;
+  background: conic-gradient(var(--c) var(--deg), color-mix(in srgb, var(--c) 16%, transparent) 0); box-shadow: 0 0 14px color-mix(in srgb, var(--c) 28%, transparent); }
+.dring.warn { --c: var(--warn); } .dring.bad { --c: var(--bad); } .dring.off { --c: var(--off); box-shadow: none; }
+.dring .in { position: absolute; inset: 4px; border-radius: 50%; background: #111A2E; display: grid; place-content: center; text-align: center; line-height: 1; }
+.dring b { font-size: 14px; font-weight: 800; } .dring span { font-size: 8.5px; color: var(--muted); }
+.menu .mi { --t: var(--link); width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; flex: none;
+  background: color-mix(in srgb, var(--t) 16%, transparent); }
+.menu .mi svg { color: var(--t) !important; }
+.menu > svg:last-child { color: var(--off); }
+.menu.danger .mi { --t: var(--bad); }
+.qdot { width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; flex: none;
+  background: rgba(92,200,255,.14); color: var(--link); font-weight: 800; font-size: 13px; line-height: 22px; }
+.qdot:hover { background: rgba(92,200,255,.25); }
