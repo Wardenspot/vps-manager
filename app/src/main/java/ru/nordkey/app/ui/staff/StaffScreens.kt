@@ -45,12 +45,15 @@ fun DashboardScreen(me: Me, nav: Nav) {
                 val s = d.getJSONObject("server")
                 val services = d.optJSONObject("services") ?: JSONObject()
                 val down = services.keys().asSequence().filter { services.optString(it) != "active" }.toList()
+                val r0 = d.getJSONObject("routers")
+                StatusHero(
+                    color = if (down.isEmpty()) NK.Ok else NK.Warn,
+                    fraction = if (r0.optInt("total") > 0) r0.optInt("online").toFloat() / r0.optInt("total") else 1f,
+                    value = "${r0.optInt("online")}", caption = "из ${r0.optInt("total")}",
+                    title = if (down.isEmpty()) "Сервер в норме" else "Есть проблемы",
+                    lines = listOf("роутеров на связи", if (down.isEmpty()) "все службы работают" else "не работает: ${down.joinToString(", ")}"),
+                )
                 NkCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Dot(if (down.isEmpty()) NK.Ok else NK.Warn)
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (down.isEmpty()) "Сервер в норме" else "Есть проблемы", fontWeight = FontWeight.SemiBold)
-                    }
                     Row {
                         listOf("CPU" to "${s.optDouble("cpu").toInt()}%", "Память" to "${s.optDouble("ram_pct").toInt()}%",
                                "Трафик" to (s.dbl("net_tx_rate")?.let { "${(it * 8 / 1_000_000).toInt()} Мб/с" } ?: "—"),

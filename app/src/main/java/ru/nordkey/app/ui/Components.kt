@@ -373,3 +373,53 @@ fun plural(n: Int, one: String, few: String, many: String): String {
     val a = Math.abs(n) % 100; val b = a % 10
     return when { a in 11..14 -> many; b == 1 -> one; b in 2..4 -> few; else -> many }
 }
+
+/** Светящееся кольцо состояния: [fraction] — доля заполнения (0..1), внутри — крупное значение. */
+@Composable
+fun StatusRing(color: Color, fraction: Float, value: String, caption: String? = null, size: Int = 92) {
+    androidx.compose.foundation.layout.Box(Modifier.size(size.dp), contentAlignment = Alignment.Center) {
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            val w = 7.dp.toPx()
+            val inset = w / 2 + 4.dp.toPx()
+            val arc = Size(this.size.width - inset * 2, this.size.height - inset * 2)
+            val tl = Offset(inset, inset)
+            drawCircle(Brush.radialGradient(listOf(color.copy(alpha = if (NK.dark) 0.30f else 0.16f), Color.Transparent)), radius = this.size.minDimension / 2)
+            drawArc(color.copy(alpha = 0.16f), 0f, 360f, false, tl, arc, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
+            val sweep = 360f * fraction.coerceIn(0.02f, 1f)
+            drawArc(color.copy(alpha = 0.35f), -90f, sweep, false, tl, arc,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(w * 2.2f, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+            drawArc(Brush.sweepGradient(listOf(color.copy(alpha = 0.75f), color, color.copy(alpha = 0.75f))), -90f, sweep, false, tl, arc,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(w, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value, color = NK.Text, fontSize = (size / 4.6).sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+            caption?.let { Text(it, color = NK.Muted, fontSize = 10.sp, maxLines = 1) }
+        }
+    }
+}
+
+/** Крупная шапка экрана: кольцо слева, заголовок и подробности справа. */
+@Composable
+fun StatusHero(color: Color, fraction: Float, value: String, caption: String?, title: String, lines: List<String>,
+               modifier: Modifier = Modifier, extra: (@Composable ColumnScope.() -> Unit)? = null) {
+    val shape = RoundedCornerShape(24.dp)
+    Row(
+        modifier.fillMaxWidth()
+            .glass(shape, color.copy(alpha = 0.45f), null)
+            .drawBehind {
+                drawCircle(Brush.radialGradient(listOf(color.copy(alpha = if (NK.dark) 0.16f else 0.08f), Color.Transparent),
+                                                center = Offset(0f, size.height / 2), radius = size.width * 0.6f),
+                           radius = size.width * 0.6f, center = Offset(0f, size.height / 2))
+            }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StatusRing(color, fraction, value, caption)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, color = color, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            lines.forEach { Text(it, color = NK.Text, fontSize = 14.sp) }
+            extra?.invoke(this)
+        }
+    }
+}

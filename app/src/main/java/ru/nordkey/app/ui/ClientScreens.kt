@@ -179,15 +179,18 @@ fun SubscriptionScreen(nav: Nav, withBar: Boolean) {
             val s = j.optJSONObject("subscription")
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 val active = s?.optBoolean("active") == true
-                NkCard(bg = if (active) NK.OkSoft else NK.WarnSoft, border = if (active) NK.Ok else NK.WarnLine) {
-                    Text(if (active) "Подписка активна" else "Подписки нет", fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                         color = if (active) NK.OkText else NK.WarnText)
-                    if (s != null) Text(
-                        (if (active) "до ${dateRu(s.str("expires_at"))} · осталось ${s.optInt("days_left")} дн." else "закончилась ${dateRu(s.str("expires_at"))}") +
-                            (if (s.optBoolean("trial")) " · пробный период" else ""), color = NK.Text)
-                    val dev = s?.optInt("devices", 0) ?: 0
-                    if (dev > 1) Text("Устройств в подписке: $dev — продление сразу за все", color = NK.Text, fontSize = 14.sp)
-                }
+                val days = s?.optInt("days_left") ?: 0
+                val dev = s?.optInt("devices", 0) ?: 0
+                StatusHero(
+                    color = if (active) (if (days <= 3) NK.Warn else NK.Ok) else NK.Warn,
+                    fraction = if (active) (days / 30f).coerceIn(0.05f, 1f) else 0.02f,
+                    value = if (active) "$days" else "0", caption = plural(if (active) days else 0, "день", "дня", "дней"),
+                    title = if (active) "Подписка активна" else "Подписки нет",
+                    lines = listOfNotNull(
+                        s?.let { if (active) "до ${dateRu(it.str("expires_at"))}" else "закончилась ${dateRu(it.str("expires_at"))}" },
+                        if (s?.optBoolean("trial") == true) "пробный период" else null,
+                        if (dev > 1) "Устройств: $dev — продление сразу за все" else null),
+                )
                 NkButton(if (active) "Продлить" else "Оформить подписку", Modifier.fillMaxWidth()) { openUrl(ctx, j.optString("pay_url")) }
                 Text("Оплата проходит в Telegram-боте NordKey. После оплаты срок здесь обновится сам.", color = NK.Muted, fontSize = 13.sp)
                 Text("Ещё одно устройство (второй телефон, компьютер, сервер) — в боте: «📄 Мой конфиг» → «➕ Добавить устройство». " +
