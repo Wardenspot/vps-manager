@@ -286,3 +286,15 @@ input[type=checkbox]:checked { background: var(--grad); }
 .banner { background: linear-gradient(90deg, rgba(53,224,255,.16), rgba(59,123,255,.2)); }
 .login .logo { filter: drop-shadow(0 0 22px rgba(53,224,255,.45)); }
 .pick { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero { --c: var(--ok); display: flex; align-items: center; gap: 18px; padding: 16px 18px; border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+  background: radial-gradient(ellipse 60% 120% at 0% 50%, color-mix(in srgb, var(--c) 16%, transparent), transparent 70%),
+              linear-gradient(rgba(23,34,60,.88), rgba(17,26,46,.88)); }
+.hero.warn { --c: var(--warn); } .hero.bad { --c: var(--bad); }
+.hero .ring { width: 92px; height: 92px; border-radius: 50%; flex: none; position: relative; display: grid; place-items: center;
+  background: conic-gradient(var(--c) var(--deg), color-mix(in srgb, var(--c) 16%, transparent) 0);
+  box-shadow: 0 0 26px color-mix(in srgb, var(--c) 35%, transparent); }
+.hero .ring .in { position: absolute; inset: 8px; border-radius: 50%; background: #0E1628; display: grid; place-content: center; text-align: center; }
+.hero .ring b { font-size: 22px; font-weight: 800; line-height: 1.1; } .hero .ring span { color: var(--muted); font-size: 11px; }
+.hero .ht { color: var(--c); font-size: 20px; font-weight: 800; margin-bottom: 2px; }
+.hero .grow { flex: 1; min-width: 0; }

@@ -504,7 +504,13 @@ function routerScreen(ip) {
       return h('div.card', h('label.row', { style: { cursor: 'pointer' } }, h('div.grow', h('div.t', 'Игровой режим'), h('div.muted.small', 'подскажет пустить игровой сервер напрямую, если через VPN высокий пинг')), cb));
     })() : null;
     const access = arr(r.access);
+    const slow = rtt != null && rtt > 120;
     return h('div.center.col',
+      hero(!online ? 'bad' : slow ? 'warn' : 'ok', !online ? 1 : rtt != null ? Math.min(1, Math.max(0.15, 1 - rtt / 300)) : 1,
+        online ? (rtt != null ? String(Math.round(rtt)) : '✓') : '×', online && rtt != null ? 'мс' : '',
+        !online ? 'Нет связи' : slow ? 'Медленно' : 'Работает',
+        [online ? `VPN подключён · связь ${ago(r.handshake_ago)} назад` : 'Роутер не выходит на связь',
+         sub ? (sub.active ? `Подписка до ${dateRu(sub.expires_at)}` : 'Подписка закончилась') : null]),
       h('div.tiles',
         h('div.tile' + (online ? '.ok' : '.warn'), h('div.k', 'Туннель'), h('div.v', online ? ago(r.handshake_ago) : 'офлайн')),
         h('div.tile' + (rtt > 120 ? '.warn' : ''), h('div.k', 'Пинг'), h('div.v', rtt != null ? Math.round(rtt) + ' мс' : '—')),
@@ -606,9 +612,9 @@ function subscriptionScreen() {
   const run = () => load(pg.body, () => api.get('/v1/subscription'), j => {
     const s = j.subscription, active = !!(s && s.active);
     return h('div.center.col',
-      h('div.card' + (active ? '.ok' : '.warn'),
-        h('div', { style: { fontSize: '20px', fontWeight: 700, color: active ? 'var(--ok-text)' : 'var(--warn-text)' } }, active ? 'Подписка активна' : 'Подписки нет'),
-        s ? h('div', (active ? `до ${dateRu(s.expires_at)} · осталось ${s.days_left} дн.` : `закончилась ${dateRu(s.expires_at)}`) + (s.trial ? ' · пробный период' : '')) : null),
+      hero(active ? (s.days_left <= 3 ? 'warn' : 'ok') : 'warn', active ? Math.min(1, Math.max(0.05, s.days_left / 30)) : 0.02,
+        String(active ? s.days_left : 0), plural(active ? s.days_left : 0, 'день', 'дня', 'дней'), active ? 'Подписка активна' : 'Подписки нет',
+        [s ? (active ? `до ${dateRu(s.expires_at)}` : `закончилась ${dateRu(s.expires_at)}`) : null, s && s.trial ? 'пробный период' : null]),
       h('button.btn.big.wide', { onclick: () => openExt(j.pay_url) }, active ? 'Продлить' : 'Оформить подписку'),
       h('div.muted.small', 'Оплата проходит в Telegram-боте NordKey. После оплаты срок здесь обновится сам. Подписка общая: роутер, телефон и этот компьютер.'));
   });
@@ -725,7 +731,9 @@ function dashboardScreen() {
     const chip = (t, ok) => h('span.chip', { style: ok === undefined ? {} : { background: ok ? 'var(--ok-soft)' : 'var(--warn-soft)', color: ok ? 'var(--ok-text)' : 'var(--warn-text)' } }, t);
     return h('div.center.col',
       can('newclient') ? setupHero() : null,
-      h('div.card', h('div.row', h('span.dot', { style: { background: down.length ? 'var(--warn)' : 'var(--ok)' } }), h('div.t', down.length ? 'Есть проблемы' : 'Сервер в норме')),
+      hero(down.length ? 'warn' : 'ok', r.total ? r.online / r.total : 1, String(r.online ?? '—'), `из ${r.total ?? '—'}`,
+        down.length ? 'Есть проблемы' : 'Сервер в норме', ['роутеров на связи', down.length ? 'не работает: ' + down.join(', ') : 'все службы работают']),
+      h('div.card',
         h('div.tiles', [['CPU', Math.round(s.cpu || 0) + '%'], ['Память', Math.round(s.ram_pct || 0) + '%'],
           ['Трафик', s.net_tx_rate != null ? Math.round(s.net_tx_rate * 8 / 1e6) + ' Мб/с' : '—'], ['Работает', ago(s.uptime)]].map(([k, v]) => h('div', h('div.muted.small', k), h('div', { style: { fontSize: '18px', fontWeight: 600 } }, v)))),
         h('div.row.wrap', Object.keys(services).map(k => chip(k, services[k] === 'active')), chip('WARP · Google ' + (d.warp && d.warp.on ? '✓' : 'выкл')))),
@@ -1160,4 +1168,12 @@ function setupScreen() {
 function setupHero() {
   return h('div.wiz-hero', { role: 'button', tabindex: 0, onclick: () => go(setupScreen) }, routerArt('idle'),
     h('div.grow', h('div.t', 'Подключить роутер'), h('div.small', 'Компьютер в сети клиента → пароль роутера → «Пуск». Ссылка для клиента — в конце.')), ico('next'));
+}
+
+// крупная шапка: светящееся кольцо + заголовок и строки
+function plural(n, a, b, c) { const x = Math.abs(n) % 100, y = x % 10; return x > 10 && x < 15 ? c : y === 1 ? a : y >= 2 && y <= 4 ? b : c; }
+function hero(kind, frac, value, caption, title, lines) {
+  const deg = Math.round(Math.max(0.02, Math.min(1, frac)) * 360);
+  return h('div.hero.' + kind, h('div.ring', { style: '--deg:' + deg + 'deg' }, h('div.in', h('b', value), caption ? h('span', caption) : null)),
+    h('div.grow', h('div.ht', title), lines.filter(Boolean).map(l => h('div', l))));
 }
