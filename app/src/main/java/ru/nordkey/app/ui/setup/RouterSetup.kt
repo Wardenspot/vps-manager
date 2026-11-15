@@ -131,7 +131,7 @@ class RouterSetup(
             wif = freeWireguard(cfg)
             ok("interface $wif", what = "создание туннеля")
             delay(1000)
-            val mykey = Regex("\"public-key\"\\s*:\\s*\"([A-Za-z0-9+/]{43}=)\"").find(k.rci("show interface $wif"))?.groupValues?.get(1)
+            val mykey = Regex("\"public-key\"\\s*:\\s*\"([A-Za-z0-9+/]{43}=)\"").findAll(k.rci("show interface $wif")).map { it.groupValues[1] }.firstOrNull { it != SRV_KEY }
             if (mykey == null) { k.rci("no interface $wif"); event(Step.Tunnel, StepStatus.Fail, "нет ключа"); throw SetupFailed("роутер не создал ключ туннеля — роутер вернул как было") }
             event(Step.Tunnel, StepStatus.Done, "создан $wif")
             event(Step.Server, StepStatus.Run, null)

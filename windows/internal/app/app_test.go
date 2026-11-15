@@ -180,3 +180,16 @@ func TestTgURL(t *testing.T) {
 		}
 	}
 }
+
+func TestSetupEndpoints(t *testing.T) {
+	_, h, key, _ := setup(t)
+	if c, _ := do(h, "GET", "/local/setup/state", ""); c != 401 {
+		t.Errorf("мастер без ключа окна: %d", c)
+	}
+	if c, m := do(h, "GET", "/local/setup/state", key); c != 200 || m["phase"] != "idle" {
+		t.Errorf("до запуска: %d %v", c, m)
+	}
+	if c, m := do(h, "POST", "/local/setup/start", key); c != 400 || m["error"] == nil {
+		t.Errorf("без адреса и пароля запускать нельзя: %d %v", c, m)
+	}
+}

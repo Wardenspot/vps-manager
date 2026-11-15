@@ -181,3 +181,54 @@ input[type=checkbox]:focus-visible { outline: 2px solid var(--link); outline-off
 .login h1 { margin: 6px 0 0; font-size: 30px; }
 .pick { font-size: 64px; font-weight: 800; color: var(--link); line-height: 1.1; }
 .banner { padding: 10px 16px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+
+/* ───────── мастер подключения роутера: всегда тёмный, со свечением ───────── */
+.wiz .body, .wiz-hero {
+  background:
+    radial-gradient(ellipse 70% 45% at 50% 18%, rgba(59,123,255,.28), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 92% 4%, rgba(124,92,255,.18), transparent 70%),
+    linear-gradient(#0B1324, #070B14);
+}
+.wiz .top { background: #0B1324; }
+.wiz-col { align-items: center; gap: 14px; max-width: 520px; padding-top: 4px; }
+.wiz-col > * { width: 100%; }
+.wiz-art-box { display: flex; justify-content: center; }
+.wiz-col > .wiz-art-box svg { width: min(70%, 280px); height: auto; }
+.wiz-art { --wa: #35E0FF; overflow: visible; }
+.wiz-art.done { --wa: #3FE0A0; } .wiz-art.fail { --wa: #FF6B7A; }
+.wiz-art.run .halo, .wiz-art.run .led { animation: wizPulse .9s ease-in-out infinite alternate; }
+@keyframes wizPulse { from { opacity: .45; } to { opacity: 1; } }
+.wiz-pill { justify-self: center; width: auto !important; align-self: center; display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 14px; border-radius: 999px; font-size: 13.5px; font-weight: 500; }
+.wiz-pill i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.wiz-pill.ok { color: #3FE0A0; background: rgba(63,224,160,.12); }
+.wiz-pill.warn { color: #FFC266; background: rgba(255,194,102,.12); }
+.wiz-pill.muted { color: #8E9BB5; background: rgba(142,155,181,.12); }
+.wiz-h { text-align: center; font-size: 24px; font-weight: 700; color: #EAF1FF; }
+.wiz-hint { text-align: center; color: #8E9BB5; font-size: 14px; }
+.wiz-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 22px; border: 1px solid #22304D;
+  background: linear-gradient(rgba(22,33,58,.92), rgba(17,26,46,.92)); }
+.wiz-card label { color: #8E9BB5; font-size: 13px; margin-top: 4px; }
+.wiz-card .in { background: transparent; border-color: #22304D; }
+.wiz-card .in:focus { border-color: #35E0FF; outline: none; }
+.wiz-card .row .in { flex: 1; }
+.wiz-go { align-self: center; width: min(70%, 320px) !important; height: 58px; border: 1px solid rgba(255,255,255,.25); border-radius: 999px; cursor: pointer;
+  background: linear-gradient(90deg, #35E0FF, #3B7BFF); color: #041022; font-size: 17px; font-weight: 800; letter-spacing: 2px;
+  box-shadow: 0 6px 28px rgba(53,224,255,.40), 0 2px 10px rgba(59,123,255,.45); transition: transform .15s, box-shadow .15s; }
+.wiz-go:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 36px rgba(53,224,255,.55), 0 2px 12px rgba(59,123,255,.55); }
+.wiz-go:disabled { opacity: .4; cursor: default; box-shadow: none; }
+.wiz-col > .wiz-go:nth-last-child(2), .wiz-col > .wiz-go:last-child { width: min(100%, 420px) !important; }
+.wiz-step { display: flex; gap: 12px; align-items: flex-start; padding: 3px 0; }
+.wiz-step .t { color: #EAF1FF; font-weight: 500; } .wiz-step.wait .t { color: #8E9BB5; }
+.wiz-step .d { color: #8E9BB5; font-size: 12.5px; } .wiz-step.fail .d { color: #FF6B7A; }
+.wiz-step .ic { width: 20px; height: 20px; margin-top: 2px; border-radius: 50%; flex: none; border: 2px solid #22304D; box-sizing: border-box; }
+.wiz-step.run .ic { border-color: #35E0FF; border-right-color: transparent; animation: rot .8s linear infinite; }
+.wiz-step.done .ic { background: #3FE0A0; border-color: #3FE0A0; box-shadow: 0 0 10px rgba(63,224,160,.6); }
+.wiz-step.fail .ic { background: #FF6B7A; border-color: #FF6B7A; }
+.wiz-srv { border-top: 1px solid #22304D; padding-top: 8px; color: #35E0FF; font: 12.5px/1.4 Consolas, monospace; }
+.wiz-link { color: #35E0FF; font: 15px/1.4 Consolas, monospace; word-break: break-all; user-select: all; }
+.wiz-hero { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 22px; border: 1px solid #22304D; cursor: pointer; color: #EAF1FF; }
+.wiz-hero:hover { border-color: #35E0FF; }
+.wiz-hero .wiz-art-box svg { width: 92px; height: auto; }
+.wiz-hero .t { font-size: 17px; font-weight: 700; } .wiz-hero .small { color: #8E9BB5; }
+.wiz-hero > svg { color: #35E0FF; }

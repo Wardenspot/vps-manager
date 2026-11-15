@@ -20,6 +20,7 @@ import (
 
 	"nordkey/win/internal/api"
 	"nordkey/win/internal/engine"
+	"nordkey/win/internal/keenetic"
 	"nordkey/win/internal/rules"
 	"nordkey/win/internal/store"
 )
@@ -58,6 +59,7 @@ type App struct {
 	lastErr string
 	pcNow   atomic.Bool // спросить /v1/pc при ближайшей проверке (после входа)
 	logs    *ring
+	setup   *keenetic.Setup // мастер подключения роутера (последний запуск)
 	stop    chan struct{}
 }
 

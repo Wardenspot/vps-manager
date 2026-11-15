@@ -59,6 +59,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /local/log", func(w http.ResponseWriter, r *http.Request) {
 		jsonOut(w, 200, map[string]any{"lines": a.logs.all()})
 	})
+	a.setupHandlers(mux)
 	mux.HandleFunc("GET /api/", a.hProxy)
 	mux.HandleFunc("POST /api/", a.hProxy)
 	mux.Handle("GET /", a.static())

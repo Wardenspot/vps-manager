@@ -80,6 +80,7 @@ const P = {
   dns: 'M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z',
   person: 'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z',
   add: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
+  next: 'M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z',
   support: 'M21 12.22C21 6.73 16.74 3 12 3c-4.69 0-9 3.65-9 9.28-.6.34-1 .98-1 1.72v2c0 1.1.9 2 2 2h1v-6.1c0-3.87 3.13-7 7-7s7 3.13 7 7V19h-8v2h8c1.1 0 2-.9 2-2v-1.22c.59-.31 1-.92 1-1.64v-2.3c0-.7-.41-1.31-1-1.62z',
   devices: 'M4 6h18V4H4c-1.1 0-2 .9-2 2v11H0v3h14v-3H4V6zm19 2h-6c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1zm-1 9h-4v-7h4v7z',
   logout: 'M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z',
@@ -689,6 +690,7 @@ function moreScreen() {
     isStaff() ? [
       h('div.sect', 'Работа'),
       can('msg') ? item('Обращения в поддержку', 'support', () => go(supportInboxScreen)) : null,
+      can('newclient') ? item('Подключить роутер (мастер)', 'router', () => go(setupScreen)) : null,
       can('newclient') ? item('Новый клиент — ссылка на бота', 'add', () => go(newClientScreen)) : null,
       can('bat') ? item('Батник для настройки роутера', 'doc', () => go(batScreen)) : null,
       can('broadcast') ? item('Рассылка клиентам', 'campaign', () => go(broadcastScreen)) : null,
@@ -722,6 +724,7 @@ function dashboardScreen() {
     const down = Object.keys(services).filter(k => services[k] !== 'active');
     const chip = (t, ok) => h('span.chip', { style: ok === undefined ? {} : { background: ok ? 'var(--ok-soft)' : 'var(--warn-soft)', color: ok ? 'var(--ok-text)' : 'var(--warn-text)' } }, t);
     return h('div.center.col',
+      can('newclient') ? setupHero() : null,
       h('div.card', h('div.row', h('span.dot', { style: { background: down.length ? 'var(--warn)' : 'var(--ok)' } }), h('div.t', down.length ? 'Есть проблемы' : 'Сервер в норме')),
         h('div.tiles', [['CPU', Math.round(s.cpu || 0) + '%'], ['Память', Math.round(s.ram_pct || 0) + '%'],
           ['Трафик', s.net_tx_rate != null ? Math.round(s.net_tx_rate * 8 / 1e6) + ' Мб/с' : '—'], ['Работает', ago(s.uptime)]].map(([k, v]) => h('div', h('div.muted.small', k), h('div', { style: { fontSize: '18px', fontWeight: 600 } }, v)))),
@@ -1033,3 +1036,128 @@ async function boot() {
 window.addEventListener('hashchange', () => { if (/k=/.test(location.hash)) location.reload(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && stack.length && !document.querySelector('.modal')) back(); if (e.altKey && e.key === 'ArrowLeft' && stack.length) back(); });
 boot();
+
+// ───────── мастер подключения роутера ─────────
+// ПК в сети клиента (Wi-Fi или кабель) → пароль роутера → «Пуск»: служба сама входит в Keenetic, включает SSH,
+// создаёт туннель, отправляет заявку на сервер и ждёт итог. В конце — ссылка клиенту на бота.
+const WIZ_STEPS = [['login', 'Вход в роутер'], ['ssh', 'Сервер SSH на роутере'], ['tunnel', 'Туннель NordKey'],
+  ['server', 'Регистрация на сервере'], ['access', 'Доступ для сервера'], ['finish', 'Настройка сайтов и проверка']];
+const clientMsg = link => 'Здравствуйте! Ваш роутер подключён к NordKey 🎉\n\nОткройте ссылку, чтобы привязать роутер к своему Telegram и оформить подписку — первые сутки бесплатно:\n' + link;
+
+function routerArt(state) { // idle | run | done | fail
+  const svg = `<svg viewBox="0 0 250 200" class="wiz-art ${state}" aria-hidden="true">
+    <defs>
+      <radialGradient id="wg" cx="50%" cy="52%" r="50%"><stop offset="0" stop-color="var(--wa)" stop-opacity=".45"/><stop offset="1" stop-color="var(--wa)" stop-opacity="0"/></radialGradient>
+      <linearGradient id="wb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2B3550"/><stop offset=".55" stop-color="#151C2E"/><stop offset="1" stop-color="#0E1322"/></linearGradient>
+      <linearGradient id="wn" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--wa)"/><stop offset="1" stop-color="#3B7BFF"/></linearGradient>
+      <filter id="wf" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="5"/></filter>
+    </defs>
+    <circle class="halo" cx="125" cy="104" r="120" fill="url(#wg)"/>
+    <ellipse cx="125" cy="178" rx="78" ry="10" fill="#000" opacity=".5" filter="url(#wf)"/>
+    <rect x="60" y="44" width="130" height="112" rx="22" fill="url(#wb)" stroke="rgba(255,255,255,.16)" stroke-width="1.5"/>
+    <path d="M106 112V74l38 38V74" fill="none" stroke="var(--wa)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" opacity=".35" filter="url(#wf)"/>
+    <path d="M106 112V74l38 38V74" fill="none" stroke="url(#wn)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <line class="led" x1="86" y1="138" x2="164" y2="138" stroke="var(--wa)" stroke-width="10" stroke-linecap="round" opacity=".35" filter="url(#wf)"/>
+    <line class="led" x1="86" y1="138" x2="164" y2="138" stroke="var(--wa)" stroke-width="3" stroke-linecap="round"/>
+  </svg>`;
+  return h('div.wiz-art-box', { html: svg });
+}
+
+function setupScreen() {
+  const pg = page('Подключить роутер', { sub: 'мастер NordKey для Keenetic' });
+  pg.el.classList.add('wiz');
+  const f = { host: '', login: 'admin', pass: '', name: '' };
+  let found = null; // null — ищем, '' — не нашли, иначе адрес
+
+  const pill = (text, kind) => h('div.wiz-pill.' + kind, h('i'), text);
+  const stepsCard = st => h('div.wiz-card.wiz-steps', WIZ_STEPS.map(([id, title]) => {
+    const s = (st.steps || {})[id] || { status: 'wait' };
+    return h('div.wiz-step.' + s.status, h('span.ic'), h('div', h('div.t', title), s.detail ? h('div.d', s.detail) : null));
+  }), st.server_line ? h('div.wiz-srv', 'Сервер: ' + st.server_line) : null);
+
+  async function find(host) {
+    found = null; paint({ phase: 'idle' });
+    try { found = (await local('POST', '/setup/find', { host: host || '' })).host || ''; } catch (e) { found = ''; }
+    if (found) f.host = found;
+    paint({ phase: 'idle' });
+  }
+
+  function idle() {
+    const inp = (k, ph, type) => { const i = h('input.in', { value: f[k], placeholder: ph, type: type || 'text', spellcheck: false }); i.oninput = () => { f[k] = i.value; startBtn.disabled = !(found && f.pass); }; return i; };
+    const startBtn = h('button.wiz-go', { disabled: !(found && f.pass), onclick: () => act(async () => {
+      await local('POST', '/setup/start', { host: f.host, login: f.login.trim() || 'admin', pass: f.pass, name: f.name.trim() });
+      f.pass = ''; poll();
+    }) }, 'ПУСК');
+    const hostIn = h('input.in', { value: f.host, placeholder: '192.168.1.1', spellcheck: false });
+    return [
+      found === null ? pill('Ищу роутер в сети компьютера…', 'muted') : found ? pill('Keenetic найден · ' + found, 'ok') : pill('Роутер Keenetic не найден', 'warn'),
+      h('div.wiz-hint', found ? 'Введите пароль администратора роутера и нажмите «Пуск» — дальше всё сделается само.'
+        : 'Подключите компьютер к Wi-Fi или кабелем к роутеру клиента. Если адрес роутера другой — введите его ниже.'),
+      h('div.wiz-card',
+        h('label', 'Адрес роутера'), h('div.row', hostIn, h('button.btn.ghost', { onclick: () => find(hostIn.value.trim()) }, found === '' ? 'Искать' : 'Проверить')),
+        h('label', 'Логин роутера'), inp('login', 'admin'),
+        h('label', 'Пароль роутера'), inp('pass', '', 'password'),
+        h('label', 'Имя клиента (необязательно)'), inp('name', 'например, Иван — дача'),
+        h('div.small.muted', 'Для нового клиента. Потом его можно поменять.')),
+      startBtn,
+    ];
+  }
+
+  function running(st) {
+    return [h('div.wiz-h', 'Настраиваю роутер'),
+      h('div.wiz-hint', 'Не отключайте компьютер от сети роутера. Для нового клиента это займёт до 20 минут — окно можно свернуть.'), stepsCard(st)];
+  }
+
+  function done(st) {
+    const r = st.result;
+    return [h('div.wiz-h', r.note ? 'Роутер подключён, но есть замечание' : 'Роутер подключён'),
+      pill('адрес в VPN ' + r.ip, r.note ? 'warn' : 'ok'),
+      r.note ? h('div.wiz-hint', { style: { color: 'var(--warn-text)' } }, r.note) : null,
+      r.link ? [
+        h('div.wiz-card', h('div.small.muted', r.new_client ? 'Ссылка для клиента' : 'Ссылка на бота'), h('div.wiz-link', r.link),
+          h('div.small.muted', 'По ней клиент привяжет роутер к своему Telegram и оформит подписку. Первые сутки бесплатно.')),
+        h('button.wiz-go', { onclick: () => { location.href = `tg://msg_url?url=${encodeURIComponent(r.link)}&text=${encodeURIComponent(clientMsg('').trim())}`; } }, 'ОТПРАВИТЬ В TELEGRAM'),
+        h('div.row', { style: { justifyContent: 'center' } },
+          h('button.btn.ghost', { onclick: () => copy(clientMsg(r.link), 'Сообщение со ссылкой скопировано') }, 'Копировать сообщение'),
+          h('button.btn.ghost', { onclick: () => copy(r.link, 'Ссылка скопирована') }, 'Только ссылку')),
+      ] : h('div.wiz-hint', 'Роутер уже был клиентом NordKey — ссылка не нужна, всё работает как прежде.'),
+      h('div.row', { style: { justifyContent: 'center' } }, h('button.btn.text', { onclick: () => find() }, 'Подключить другой роутер'),
+        h('button.btn.text', { onclick: () => { stack = []; show(); } }, 'Готово'))];
+  }
+
+  function failed(st) {
+    return [h('div.wiz-h', 'Не получилось'), h('div.wiz-card', h('div', { style: { color: 'var(--bad)' } }, st.error || 'ошибка')),
+      Object.keys(st.steps || {}).length ? stepsCard(st) : null,
+      h('button.wiz-go', { onclick: () => find(f.host) }, 'ПОВТОРИТЬ'),
+      f.host ? h('button.btn.ghost', { onclick: () => openExt('http://' + f.host + '/') }, 'Открыть настройки роутера') : null];
+  }
+
+  function paint(st) {
+    const ph = st.phase || 'idle';
+    pg.body.replaceChildren(h('div.center.col.wiz-col',
+      routerArt({ idle: 'idle', running: 'run', done: 'done', failed: 'fail' }[ph]),
+      ph === 'running' ? running(st) : ph === 'done' ? done(st) : ph === 'failed' ? failed(st) : idle()));
+  }
+
+  let polling = false;
+  function poll() {
+    if (polling) return; polling = true;
+    const tick = async () => {
+      let st; try { st = await local('GET', '/setup/state'); } catch (e) { return; }
+      paint(st);
+      if (st.phase !== 'running') { clearTimers(); polling = false; }
+    };
+    tick(); every(1500, tick);
+  }
+
+  // если мастер уже идёт (окно закрывали) — показываем ход, иначе ищем роутер
+  // последний готовый итог тоже показываем — чтобы можно было ещё раз отправить ссылку
+  local('GET', '/setup/state').then(st => { if (st.phase === 'running') poll(); else if (st.phase === 'done') paint(st); else find(); }).catch(() => find());
+  paint({ phase: 'idle' });
+  return pg;
+}
+
+function setupHero() {
+  return h('div.wiz-hero', { role: 'button', tabindex: 0, onclick: () => go(setupScreen) }, routerArt('idle'),
+    h('div.grow', h('div.t', 'Подключить роутер'), h('div.small', 'Компьютер в сети клиента → пароль роутера → «Пуск». Ссылка для клиента — в конце.')), ico('next'));
+}
