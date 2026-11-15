@@ -38,21 +38,54 @@ class Keenetic(val host: String, network: Network? = null, quick: Boolean = fals
         .connectTimeout(if (quick) 2L else 6L, TimeUnit.SECONDS)
         .readTimeout(if (quick) 4L else 90L, TimeUnit.SECONDS)
         .apply { network?.let { socketFactory(it.socketFactory) } }
+        .apply {
+            // роутер в локальной сети может отвечать только по HTTPS со своим (самоподписанным) сертификатом
+            val tm = object : javax.net.ssl.X509TrustManager {
+                override fun checkClientTrusted(c: Array<java.security.cert.X509Certificate>, a: String) {}
+                override fun checkServerTrusted(c: Array<java.security.cert.X509Certificate>, a: String) {}
+                override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = emptyArray()
+            }
+            val ctx = javax.net.ssl.SSLContext.getInstance("TLS").apply { init(null, arrayOf(tm), java.security.SecureRandom()) }
+            sslSocketFactory(ctx.socketFactory, tm)
+            hostnameVerifier { _, _ -> true }
+        }
         .build()
     private val json = "application/json".toMediaType()
+    /** http или https — что ответило при проверке. */
+    @Volatile var scheme = "http"
+    private fun url(p: String) = "$scheme://$host$p"
 
-    /** Отвечает ли по этому адресу роутер Keenetic. */
-    suspend fun probe(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            http.newCall(Request.Builder().url("http://$host/auth").build()).execute().use { it.code == 200 || it.header("X-NDM-Challenge") != null }
-        } catch (e: Exception) {
-            false
+    /** Роутер Keenetic/Netcraze? null — да, иначе почему нет (для подсказки «что проверял»). */
+    suspend fun check(): String? = withContext(Dispatchers.IO) {
+        var why = "нет ответа"
+        for (sc in listOf("http", "https")) {
+            try {
+                http.newCall(Request.Builder().url("$sc://$host/auth").build()).execute().use { r ->
+                    val ndm = r.headers.names().any { it.startsWith("X-NDM", ignoreCase = true) }
+                    if (r.code == 200 || ndm) { scheme = sc; return@withContext null }
+                    why = "отвечает, но не Keenetic (${r.code})"
+                }
+                // по http это может быть переадресация на https — пробуем дальше
+            } catch (e: java.net.UnknownHostException) {
+                return@withContext "такого адреса нет"
+            } catch (e: java.net.SocketTimeoutException) {
+                why = "не отвечает"
+            } catch (e: Exception) {
+                why = when {
+                    e.message?.contains("EPERM", true) == true || e.message?.contains("not permitted", true) == true -> "доступ закрыт (VPN?)"
+                    e.message?.contains("refused", true) == true -> "соединение отклонено"
+                    else -> "нет ответа"
+                }
+            }
         }
+        why
     }
+
+    suspend fun probe(): Boolean = check() == null
 
     suspend fun login(user: String, pass: String) = withContext(Dispatchers.IO) {
         val first = try {
-            http.newCall(Request.Builder().url("http://$host/auth").build()).execute()
+            http.newCall(Request.Builder().url(url("/auth")).build()).execute()
         } catch (e: Exception) {
             throw KeeneticException("роутер не отвечает по адресу $host")
         }
@@ -61,7 +94,7 @@ class Keenetic(val host: String, network: Network? = null, quick: Boolean = fals
         val realm = first.header("X-NDM-Realm") ?: throw KeeneticException("по адресу $host не роутер Keenetic")
         val challenge = first.header("X-NDM-Challenge") ?: throw KeeneticException("по адресу $host не роутер Keenetic")
         val body = JSONObject().put("login", user).put("password", authHash(user, pass, realm, challenge)).toString().toRequestBody(json)
-        http.newCall(Request.Builder().url("http://$host/auth").post(body).build()).execute().use {
+        http.newCall(Request.Builder().url(url("/auth")).post(body).build()).execute().use {
             if (it.code != 200) throw KeeneticException("неверный логин или пароль роутера")
         }
     }
@@ -69,7 +102,7 @@ class Keenetic(val host: String, network: Network? = null, quick: Boolean = fals
     /** Команды CLI → сырой ответ RCI (как у батника). */
     suspend fun rci(vararg cmds: String): String = withContext(Dispatchers.IO) {
         val arr = JSONArray().apply { cmds.forEach { put(JSONObject().put("parse", it)) } }
-        val req = Request.Builder().url("http://$host/rci/").post(arr.toString().toRequestBody(json)).build()
+        val req = Request.Builder().url(url("/rci/")).post(arr.toString().toRequestBody(json)).build()
         try {
             http.newCall(req).execute().use { r ->
                 if (r.code == 401) throw KeeneticException("роутер завершил сеанс — войдите заново")
@@ -93,7 +126,7 @@ class Keenetic(val host: String, network: Network? = null, quick: Boolean = fals
             Regex("\"status\"\\s*:\\s*\"error\"[^}]*\"message\"\\s*:\\s*\"([^\"]*)\"").findAll(resp).map { it.groupValues[1] }.toList()
 
         /** Wi-Fi телефона: подключён ли, сама сеть и адреса, где может быть роутер (шлюз, DHCP-сервер, x.y.z.1, привычные). */
-        data class WifiInfo(val connected: Boolean, val network: Network?, val candidates: List<String>)
+        data class WifiInfo(val connected: Boolean, val network: Network?, val candidates: List<String>, val vpn: Boolean = false)
 
         @Suppress("DEPRECATION")
         fun wifi(ctx: Context): WifiInfo {
@@ -131,14 +164,32 @@ class Keenetic(val host: String, network: Network? = null, quick: Boolean = fals
                 }
             } catch (_: Exception) {
             }
-            out += listOf("192.168.1.1", "192.168.0.1", "my.keenetic.net")
-            return WifiInfo(connected, net, out.toList())
+            out += listOf("192.168.1.1", "192.168.0.1", "my.keenetic.net", "my.netcraze.ru")
+            // включённый VPN на телефоне часто заворачивает и домашнюю сеть — тогда роутер «не виден»
+            val vpn = try {
+                cm?.allNetworks?.any { cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true } == true
+            } catch (_: Exception) { false }
+            return WifiInfo(connected, net, out.toList(), vpn)
         }
 
-        /** Первый адрес, где отвечает Keenetic (по очереди, через Wi-Fi). */
-        suspend fun find(hosts: List<String>, network: Network?): String? {
-            for (h in hosts) if (Keenetic(h, network, quick = true).probe()) return h
-            return null
+        /** Найденный роутер: адрес, http/https и шли ли запросы через Wi-Fi напрямую. */
+        data class Found(val host: String, val scheme: String, val bound: Boolean)
+
+        /** Первый адрес, где отвечает Keenetic/Netcraze (по очереди), и что ответили остальные. */
+        suspend fun find(hosts: List<String>, network: Network?): Pair<Found?, List<String>> {
+            val tried = mutableListOf<String>()
+            for (h in hosts) {
+                val a = Keenetic(h, network, quick = true)
+                var why = a.check()
+                if (why == null) return Found(h, a.scheme, network != null) to tried
+                // привязка к Wi-Fi может не пройти (VPN без обхода) — пробуем без неё
+                if (network != null) {
+                    val b = Keenetic(h, null, quick = true)
+                    why = b.check() ?: return Found(h, b.scheme, false) to tried
+                }
+                tried += "$h — $why"
+            }
+            return null to tried
         }
     }
 }

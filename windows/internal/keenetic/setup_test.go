@@ -254,3 +254,12 @@ func (p *pathServer) Get(path string) (map[string]any, error) {
 	p.paths = append(p.paths, path)
 	return p.fakeServer.Get(path)
 }
+
+func TestProbeHTTPSOnly(t *testing.T) {
+	ts := httptest.NewTLSServer((&fakeRouter{}).handler())
+	defer ts.Close()
+	c := New(strings.TrimPrefix(ts.URL, "https://"))
+	if !c.Probe(t.Context()) || c.Scheme != "https" {
+		t.Fatalf("роутер только по https не найден: %v %s", c.Probe(t.Context()), c.Scheme)
+	}
+}

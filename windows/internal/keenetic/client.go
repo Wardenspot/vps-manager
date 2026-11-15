@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/md5"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -23,34 +24,48 @@ import (
 
 // Client — один роутер по адресу Host (без схемы, например 192.168.1.1).
 type Client struct {
-	Host string
-	hc   *http.Client
+	Host   string
+	Scheme string // http или https — что ответило при проверке
+	hc     *http.Client
 }
 
 func New(host string) *Client {
 	jar, _ := cookiejar.New(nil)
-	return &Client{Host: host, hc: &http.Client{
+	return &Client{Host: host, Scheme: "http", hc: &http.Client{
 		Jar:     jar,
 		Timeout: 90 * time.Second,
 		Transport: &http.Transport{
 			Proxy:       nil, // роутер — в локальной сети, системный прокси ни к чему
 			DialContext: (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+			// роутер может отвечать только по HTTPS со своим самоподписанным сертификатом
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // только роутер в локальной сети
 		},
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}}
 }
 
-func (c *Client) url(p string) string { return "http://" + c.Host + p }
+func (c *Client) url(p string) string { return c.Scheme + "://" + c.Host + p }
 
-// Probe — отвечает ли по адресу роутер Keenetic.
+// Probe — отвечает ли по адресу роутер Keenetic/Netcraze (по http, затем по https).
 func (c *Client) Probe(ctx context.Context) bool {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.url("/auth"), nil)
-	r, err := c.hc.Do(req)
-	if err != nil {
-		return false
+	for _, sc := range []string{"http", "https"} {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, sc+"://"+c.Host+"/auth", nil)
+		r, err := c.hc.Do(req)
+		if err != nil {
+			continue
+		}
+		r.Body.Close()
+		ndm := false
+		for k := range r.Header {
+			ndm = ndm || strings.HasPrefix(strings.ToUpper(k), "X-NDM")
+		}
+		if r.StatusCode == 200 || ndm {
+			c.Scheme = sc
+			return true
+		}
+		// ответ не от Keenetic: по http это может быть переадресация на https — пробуем дальше
 	}
-	r.Body.Close()
-	return r.StatusCode == 200 || r.Header.Get("X-NDM-Challenge") != ""
+	return false
 }
 
 // AuthHash — пароль для входа: SHA256(challenge + MD5(login:realm:password)).
@@ -146,7 +161,7 @@ func Candidates() []string {
 			add(fmt.Sprintf("%d.%d.%d.1", ip[0], ip[1], ip[2]))
 		}
 	}
-	for _, s := range []string{"192.168.1.1", "192.168.0.1", "my.keenetic.net"} {
+	for _, s := range []string{"192.168.1.1", "192.168.0.1", "my.keenetic.net", "my.netcraze.ru"} {
 		add(s)
 	}
 	return out
