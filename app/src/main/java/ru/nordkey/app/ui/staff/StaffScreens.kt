@@ -41,6 +41,7 @@ fun DashboardScreen(me: Me, nav: Nav) {
         NkTopBar("NordKey", "srv1 · Стокгольм · AmneziaWG", onRefresh = load.reload)
         Loaded(load) { d ->
             Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (me.can("newclient")) ru.nordkey.app.ui.setup.SetupHeroCard { nav.go(Scr.Setup) }
                 val s = d.getJSONObject("server")
                 val services = d.optJSONObject("services") ?: JSONObject()
                 val down = services.keys().asSequence().filter { services.optString(it) != "active" }.toList()

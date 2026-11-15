@@ -38,6 +38,18 @@ fun shareText(ctx: Context, text: String, title: String = "Поделиться"
     ctx.startActivity(Intent.createChooser(i, title).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
+/** Отправить текст сразу в Telegram (выбор чата), без Telegram — обычное «Поделиться». */
+fun shareToTelegram(ctx: Context, text: String) {
+    for (pkg in listOf("org.telegram.messenger", "org.telegram.messenger.web", "org.thunderdog.challegram")) {
+        try {
+            ctx.startActivity(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text).setPackage(pkg)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return
+        } catch (_: Exception) {
+        }
+    }
+    shareText(ctx, text, "Отправить клиенту")
+}
+
 /** Поделиться файлом (Telegram, WhatsApp, почта…). */
 fun shareFile(ctx: Context, name: String, data: ByteArray, mime: String = "application/octet-stream", title: String = "Отправить файл") {
     val dir = File(ctx.cacheDir, "share").apply { mkdirs() }

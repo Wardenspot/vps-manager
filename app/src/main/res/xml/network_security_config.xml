@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Все адреса сервера в приложении — HTTPS. Открытый HTTP нужен только мастеру подключения:
+     веб-интерфейс Keenetic в локальной сети работает по http, а его адрес у клиентов бывает любой. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
