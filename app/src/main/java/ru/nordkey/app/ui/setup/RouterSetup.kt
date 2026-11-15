@@ -32,9 +32,13 @@ data class SetupResult(val ip: String, val link: String?, val newClient: Boolean
 class RouterSetup(
     private val k: Keenetic,
     private val clientName: String,
+    /** Самостоятельное подключение без входа (как батник) — открытый адрес сервера. */
+    private val self: Boolean = false,
     private val event: (Step, StepStatus, String?) -> Unit,
     private val serverMsg: (String) -> Unit,
 ) {
+    private val base = if (self) "/v1/public/onboard" else "/v1/staff/onboard"
+
     companion object {
         const val SRV_KEY = "jwn8oUjJ2IUJv9a0i/JVGXPgYZMIjvlYLjiHenuzh3w="
         const val ASC = "4 40 70 107 53 1068678846 1558046116 2145091299 1103781949"
@@ -74,7 +78,7 @@ class RouterSetup(
         var last = ""
         val until = System.currentTimeMillis() + seconds * 1000L
         while (System.currentTimeMillis() < until) {
-            val s = try { Api.get("/v1/staff/onboard/status?run=$run") } catch (e: Exception) { null }
+            val s = try { Api.get("$base/status?run=$run") } catch (e: Exception) { null }
             if (s != null && s.optString("run") == run) {
                 val msg = s.optString("msg")
                 if (msg.isNotBlank() && msg != last) { serverMsg(msg); last = msg }
@@ -119,7 +123,7 @@ class RouterSetup(
             event(Step.Tunnel, StepStatus.Done, "уже есть: $wif, $ip")
             event(Step.Server, StepStatus.Run, null)
             val mykey = Regex("\"public-key\"\\s*:\\s*\"([A-Za-z0-9+/]{43}=)\"").findAll(k.rci("show interface $wif")).map { it.groupValues[1] }.firstOrNull { it != SRV_KEY }
-            run = Api.post("/v1/staff/onboard", "step" to "reg", "ip" to ip, "key" to (mykey ?: ""), "pass" to ngPass).getString("run")
+            run = Api.post(base, "step" to "reg", "ip" to ip, "key" to (mykey ?: ""), "pass" to ngPass).getString("run")
             val s = waitServer(run, "ready", 60)
             if (s.optString("state") != "ready") { event(Step.Server, StepStatus.Fail, s.optString("msg")); throw SetupFailed(s.optString("msg")) }
             event(Step.Server, StepStatus.Done, "сервер знает этот роутер")
@@ -136,7 +140,7 @@ class RouterSetup(
             event(Step.Tunnel, StepStatus.Done, "создан $wif")
             event(Step.Server, StepStatus.Run, null)
             val r = try {
-                Api.post("/v1/staff/onboard", "step" to "new", "key" to mykey, "pass" to ngPass, "serial" to serial, "mac" to mac?.lowercase(), "name" to clientName)
+                Api.post(base, "step" to "new", "key" to mykey, "pass" to ngPass, "serial" to serial, "mac" to mac?.lowercase(), "name" to clientName)
             } catch (e: Exception) { k.rci("no interface $wif"); event(Step.Server, StepStatus.Fail, e.message); throw SetupFailed("${e.message} — роутер вернул как было") }
             run = r.getString("run")
             val s = waitServer(run, "ready", 60)
@@ -170,13 +174,13 @@ class RouterSetup(
 
         // 5. сервер сам заходит по SSH и донастраивает
         event(Step.Finish, StepStatus.Run, null)
-        Api.post("/v1/staff/onboard", "step" to "done", "ip" to ip, "run" to run)
+        Api.post(base, "step" to "done", "ip" to ip, "run" to run)
         var s = waitServer(run, "ok", if (newClient) 1500 else 600, allowMove = true)
         if (s.optString("state") == "move") {
             ip = s.getString("ip")
             ok("interface $wif ip address $ip 255.255.255.255", "system configuration save", what = "возврат прежнего адреса")
             serverMsg("роутер уже был клиентом NordKey — вернул ему прежний адрес $ip")
-            Api.post("/v1/staff/onboard", "step" to "done", "ip" to ip, "run" to run)
+            Api.post(base, "step" to "done", "ip" to ip, "run" to run)
             s = waitServer(run, "ok", 1500)
         }
         val link = s.optString("link").ifBlank { null }

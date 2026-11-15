@@ -25,7 +25,7 @@ class KeeneticException(msg: String) : Exception(msg)
  * Роутер Keenetic в локальной сети (телефон подключён к его Wi-Fi): вход как в веб-интерфейсе и команды CLI через RCI.
  * Запросы идут именно через Wi-Fi (network), даже если у Wi-Fi нет интернета и телефон держит мобильную сеть.
  */
-class Keenetic(val host: String, network: Network? = null) {
+class Keenetic(val host: String, network: Network? = null, quick: Boolean = false) {
     private val jar = object : CookieJar {
         private val store = mutableListOf<Cookie>()
         @Synchronized override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
@@ -35,8 +35,8 @@ class Keenetic(val host: String, network: Network? = null) {
     }
     private val http = OkHttpClient.Builder()
         .cookieJar(jar)
-        .connectTimeout(6, TimeUnit.SECONDS)
-        .readTimeout(90, TimeUnit.SECONDS)
+        .connectTimeout(if (quick) 2L else 6L, TimeUnit.SECONDS)
+        .readTimeout(if (quick) 4L else 90L, TimeUnit.SECONDS)
         .apply { network?.let { socketFactory(it.socketFactory) } }
         .build()
     private val json = "application/json".toMediaType()
@@ -92,17 +92,53 @@ class Keenetic(val host: String, network: Network? = null) {
         fun errors(resp: String): List<String> =
             Regex("\"status\"\\s*:\\s*\"error\"[^}]*\"message\"\\s*:\\s*\"([^\"]*)\"").findAll(resp).map { it.groupValues[1] }.toList()
 
-        /** Wi-Fi телефона и адрес его шлюза (это и есть роутер). */
+        /** Wi-Fi телефона: подключён ли, сама сеть и адреса, где может быть роутер (шлюз, DHCP-сервер, x.y.z.1, привычные). */
+        data class WifiInfo(val connected: Boolean, val network: Network?, val candidates: List<String>)
+
         @Suppress("DEPRECATION")
-        fun wifi(ctx: Context): Pair<Network?, String?> {
-            val cm = ctx.getSystemService(ConnectivityManager::class.java) ?: return null to null
-            for (n in cm.allNetworks) {
-                val caps = cm.getNetworkCapabilities(n) ?: continue
-                if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
-                val gw = cm.getLinkProperties(n)?.routes?.firstOrNull { it.isDefaultRoute && it.gateway is Inet4Address }?.gateway?.hostAddress
-                return n to gw
+        fun wifi(ctx: Context): WifiInfo {
+            val cm = ctx.getSystemService(ConnectivityManager::class.java)
+            val out = LinkedHashSet<String>()
+            var net: Network? = null
+            var connected = false
+            fun addFrom(lp: android.net.LinkProperties?) {
+                if (lp == null) return
+                lp.routes.filter { it.gateway is Inet4Address && !it.gateway!!.isAnyLocalAddress }
+                    .sortedByDescending { it.isDefaultRoute }.forEach { r -> r.gateway?.hostAddress?.let { out += it } }
+                if (android.os.Build.VERSION.SDK_INT >= 30) (lp.dhcpServerAddress as? Inet4Address)?.hostAddress?.let { out += it }
+                lp.linkAddresses.mapNotNull { it.address as? Inet4Address }.filter { it.isSiteLocalAddress }.forEach { a ->
+                    val b = a.address; out += "${b[0].toInt() and 255}.${b[1].toInt() and 255}.${b[2].toInt() and 255}.1"
+                }
             }
-            return null to null
+            try {
+                cm?.allNetworks?.forEach { n ->
+                    val caps = cm.getNetworkCapabilities(n) ?: return@forEach
+                    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+                        connected = true; if (net == null) net = n; addFrom(cm.getLinkProperties(n))
+                    }
+                }
+            } catch (_: Exception) {
+            }
+            // запасной путь — старый WifiManager: работает и там, где ConnectivityManager прячет сеть
+            try {
+                val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+                if (wm != null && wm.isWifiEnabled) {
+                    val gw = wm.dhcpInfo?.gateway ?: 0
+                    if (gw != 0) {
+                        connected = true
+                        out += "${gw and 255}.${gw shr 8 and 255}.${gw shr 16 and 255}.${gw shr 24 and 255}"
+                    }
+                }
+            } catch (_: Exception) {
+            }
+            out += listOf("192.168.1.1", "192.168.0.1", "my.keenetic.net")
+            return WifiInfo(connected, net, out.toList())
+        }
+
+        /** Первый адрес, где отвечает Keenetic (по очереди, через Wi-Fi). */
+        suspend fun find(hosts: List<String>, network: Network?): String? {
+            for (h in hosts) if (Keenetic(h, network, quick = true).probe()) return h
+            return null
         }
     }
 }

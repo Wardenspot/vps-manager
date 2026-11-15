@@ -353,13 +353,15 @@ fun PersonRow(name: String?, username: String?, tg: Long, role: String, note: St
 
 /** Заголовок блока с иконкой и счётчиком справа. */
 @Composable
-fun CardHeader(title: String, icon: ImageVector, tint: Color = NK.Link, count: String? = null) {
+fun CardHeader(title: String, icon: ImageVector, tint: Color = NK.Link, count: String? = null, help: String? = null) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(tint.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
             Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
         }
         Spacer(Modifier.width(10.dp))
-        Text(title, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f))
+        Text(title, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+        help?.let { Spacer(Modifier.width(8.dp)); HelpDot(it) }
+        Spacer(Modifier.weight(1f))
         count?.let { Text(it, color = NK.Muted, fontSize = 13.sp) }
     }
 }
@@ -379,8 +381,8 @@ fun plural(n: Int, one: String, few: String, many: String): String {
 fun StatusRing(color: Color, fraction: Float, value: String, caption: String? = null, size: Int = 92) {
     androidx.compose.foundation.layout.Box(Modifier.size(size.dp), contentAlignment = Alignment.Center) {
         androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-            val w = 7.dp.toPx()
-            val inset = w / 2 + 4.dp.toPx()
+            val w = (size * 0.075f).dp.toPx()
+            val inset = w / 2 + (size * 0.045f).dp.toPx()
             val arc = Size(this.size.width - inset * 2, this.size.height - inset * 2)
             val tl = Offset(inset, inset)
             drawCircle(Brush.radialGradient(listOf(color.copy(alpha = if (NK.dark) 0.30f else 0.16f), Color.Transparent)), radius = this.size.minDimension / 2)
@@ -392,8 +394,8 @@ fun StatusRing(color: Color, fraction: Float, value: String, caption: String? = 
                     style = androidx.compose.ui.graphics.drawscope.Stroke(w, cap = androidx.compose.ui.graphics.StrokeCap.Round))
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(value, color = NK.Text, fontSize = (size / 4.6).sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
-            caption?.let { Text(it, color = NK.Muted, fontSize = 10.sp, maxLines = 1) }
+            Text(value, color = NK.Text, fontSize = (size / (if (size < 60) 3.4 else 4.6)).sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+            caption?.let { Text(it, color = NK.Muted, fontSize = (if (size < 60) 8 else 10).sp, maxLines = 1, lineHeight = 9.sp) }
         }
     }
 }
@@ -423,3 +425,16 @@ fun StatusHero(color: Color, fraction: Float, value: String, caption: String?, t
         }
     }
 }
+
+/** Сколько дней подписки осталось — маленькое кольцо для списков (как в «Моей подписке»). */
+@Composable
+fun DaysRing(sub: org.json.JSONObject?, size: Int = 46) {
+    val active = sub?.optBoolean("active") == true
+    val days = if (active) sub!!.optInt("days_left") else 0
+    val color = when { sub == null -> NK.Off; !active -> NK.Bad; days <= 3 -> NK.Warn; else -> NK.Ok }
+    StatusRing(color, if (active) (days / 30f).coerceIn(0.05f, 1f) else 1f, if (sub == null) "—" else "$days",
+               if (sub == null) null else "дн.", size)
+}
+
+/** Дней до конца подписки для сортировки: нет подписки — в самом начале. */
+fun daysLeft(sub: org.json.JSONObject?): Int = if (sub?.optBoolean("active") == true) sub.optInt("days_left") else -1

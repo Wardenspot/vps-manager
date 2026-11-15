@@ -128,9 +128,7 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                     val members = acc.filter { !it.optBoolean("main") }
                     val canShare = level == "owner" || (staff && me.can("routers.admin"))
                     NkCard {
-                        CardHeader("Семейный доступ", Icons.Default.Groups, NK.Family, count = "${members.size} из 3")
-                        Text("Члены семьи видят роутер в боте и приложении, добавляют сайты и пишут в поддержку со своего Telegram. Бесплатно.",
-                             color = NK.Muted, fontSize = 13.sp)
+                        CardHeader("Семейный доступ", Icons.Default.Groups, NK.Family, count = "${members.size} из 3", help = "family")
                         NkDivider()
                         acc.forEach { a ->
                             val main = a.optBoolean("main")
@@ -143,7 +141,6 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                                           }
                                       }) else null)
                         }
-                        if (members.isEmpty()) Text("Пока никого. Пригласите — ссылка придёт в Telegram.", color = NK.Muted, fontSize = 13.sp)
                         if (canShare && members.size < 3) OutlinedButton(onClick = { dialog = RDialog.Share }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Пригласить члена семьи")
                         }
@@ -153,8 +150,7 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                 val cloud = r.str("cloud_url")
                 val hasPass = r.optBoolean("admin_pass")
                 if (cloud != null || hasPass) NkCard {
-                    CardHeader("Вход в настройки роутера", Icons.Default.Key)
-                    Text("Настройки роутера открываются из любого места — даже когда VPN не работает.", color = NK.Muted, fontSize = 13.sp)
+                    CardHeader("Вход в настройки роутера", Icons.Default.Key, help = "router_web")
                     if (cloud != null) Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(cloud.removePrefix("https://"), color = NK.Link, fontSize = 13.sp, modifier = Modifier.weight(1f))
                         TextButton(onClick = { openUrl(ctx, cloud) }) {
@@ -181,7 +177,10 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                     }
                 }
                 if (!r.optBoolean("migrated", true)) NkCard(bg = NK.WarnSoft, border = NK.WarnLine) {
-                    Text("Роутер ещё на старом сервере — часть функций недоступна, пока его не перенесут.", color = NK.WarnText, fontSize = 14.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Роутер на старом сервере", color = NK.WarnText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        HelpDot("old_server")
+                    }
                 }
                 if (live == null) TextButton(onClick = {
                     act { busy = true; try { val l = Api.get("/v1/routers/$ip/live"); if (l.optBoolean("ok")) { live = l; null } else l.optString("error", "Роутер не ответил") } finally { busy = false } }
@@ -238,8 +237,7 @@ fun RouterScreen(ip: String, me: Me, nav: Nav) {
                     NkCard {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("Игровой режим", fontWeight = FontWeight.SemiBold)
-                                Text("подскажет пустить игровой сервер напрямую, если через VPN высокий пинг", color = NK.Muted, fontSize = 12.sp)
+                                TitleHelp("Игровой режим", "game", size = 15)
                             }
                             Switch(checked = on, enabled = canWrite, onCheckedChange = { v ->
                                 act { val x = Api.post("/v1/routers/$ip/game", "on" to v); on = x.optBoolean("on"); if (on) "Игровой режим включён" else "Выключен" }

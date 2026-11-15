@@ -69,9 +69,7 @@ fun AutopilotScreen(me: Me, nav: Nav) {
                                 })
                             }
                         }
-                        Text("Сам: перезапуск служб сервера, чистка диска, починка DNS на роутере, WARP. " +
-                             "По кнопке: перезагрузка роутера, изменения маршрутов и DNS. Никогда: удаление, оплаты, роли.",
-                             color = NK.Muted, fontSize = 12.sp)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { HelpLink("Что делает сам", "autopilot") }
                     }
                 }
                 val active = list.filter { it.optString("status") in setOf("need_approval", "escalated", "open") }
@@ -137,8 +135,6 @@ fun IncidentScreen(id: Long, me: Me, nav: Nav) {
                 i.str("prompt")?.let { p ->
                     NkCard(bg = NK.WarnSoft, border = NK.WarnLine) {
                         Text("Сложный случай", fontWeight = FontWeight.SemiBold, color = NK.WarnText)
-                        Text("Автопилот собрал всё, что выяснил. Скопируйте запрос и отправьте его Claude — там будут шаги для сервера.",
-                             color = NK.Text, fontSize = 14.sp)
                         Button(onClick = { copy(ctx, p); toast(ctx, "Запрос скопирован") }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.ContentCopy, null); Spacer(Modifier.width(6.dp)); Text("Скопировать запрос для Claude")
                         }

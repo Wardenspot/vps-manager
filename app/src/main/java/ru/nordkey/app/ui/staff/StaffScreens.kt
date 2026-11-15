@@ -116,6 +116,7 @@ fun ClientsScreen(me: Me, nav: Nav) {
     val load = rememberLoad { Api.get("/v1/staff/clients") }
     var q by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf("all") }
+    var sort by rememberSaveable { mutableStateOf("days") }
     Column(Modifier.fillMaxSize()) {
         NkTopBar("Клиенты", onRefresh = load.reload)
         Loaded(load) { j ->
@@ -140,6 +141,11 @@ fun ClientsScreen(me: Me, nav: Nav) {
                     listOf("all" to "Все", "problems" to "Проблемы", "offline" to "Офлайн", "old" to "На старом").forEach { (k, t) ->
                         FilterChip(selected = filter == k, onClick = { filter = k }, label = { Text("$t ${count(k)}", fontSize = 12.sp) })
                     }
+                    Spacer(Modifier.width(4.dp))
+                    // сортировка: меньше всего дней подписки — сверху, или по имени
+                    AssistChip(onClick = { sort = when (sort) { "days" -> "days_desc"; "days_desc" -> "name"; else -> "days" } },
+                               leadingIcon = { Icon(Icons.Default.SwapVert, null, Modifier.size(16.dp)) },
+                               label = { Text(when (sort) { "days" -> "Дни ↑"; "days_desc" -> "Дни ↓"; else -> "Имя" }, fontSize = 12.sp) })
                 }
             }
             var accounts by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -152,7 +158,13 @@ fun ClientsScreen(me: Me, nav: Nav) {
             }
             LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 // несколько роутеров у одного клиента — одной карточкой
-                val groups = shown.groupBy { c -> c.optLong("owner_tg").takeIf { it > 0 }?.toString() ?: c.getString("ip") }.values.toList()
+                val groups0 = shown.groupBy { c -> c.optLong("owner_tg").takeIf { it > 0 }?.toString() ?: c.getString("ip") }.values.toList()
+                val days = { g: List<JSONObject> -> g.maxOf { daysLeft(it.optJSONObject("subscription")) } }
+                val groups = when (sort) {
+                    "days" -> groups0.sortedBy(days)
+                    "days_desc" -> groups0.sortedByDescending(days)
+                    else -> groups0.sortedBy { (it.first().str("owner_name") ?: it.first().optString("name")).lowercase() }
+                }
                 items(groups) { g ->
                     val ownerTg = g.first().optLong("owner_tg")
                     if (g.size > 1 && ownerTg > 0)
@@ -188,11 +200,7 @@ fun UsersScreen(me: Me, nav: Nav) {
         Loaded(load) { j ->
             LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
-                    NkCard(bg = NK.AccentSoft, border = NK.Accent) {
-                        Text("Роли", fontWeight = FontWeight.SemiBold)
-                        Text("Админ — всё, кроме ролей.\nТехник — роутеры, новые клиенты, батники (без денег и рассылок).\n" +
-                             "Поддержка — видит клиентов и пишет им.", color = NK.AccentText, fontSize = 13.sp)
-                    }
+                    HelpLink("Кто что может", "roles")
                 }
                 items(j.optJSONArray("accounts").objects()) { a ->
                     NkCard(onClick = if (me.can("users.manage") && a.optString("role") != "owner") ({ roleFor = a }) else null) {
@@ -284,15 +292,9 @@ fun BatScreen(nav: Nav) {
     Column(Modifier.fillMaxSize()) {
         NkTopBar("Батник для настройки", onBack = nav::back)
         Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            NkCard {
-                Text("Один файл для всех случаев", fontWeight = FontWeight.SemiBold)
-                Text("Запускается на компьютере, подключённом к роутеру Keenetic: старых клиентов переносит на новый сервер, " +
-                     "новых — подключает (нужен код администратора). После настройки новый клиент получает персональную ссылку на бота.",
-                     color = NK.Muted, fontSize = 14.sp)
-            }
+            HelpLink("Что делает батник", "bat")
             OutlinedTextField(router, { router = it }, Modifier.fillMaxWidth(), singleLine = true, isError = !routerOk,
-                              label = { Text("Адрес роутера (необязательно)") }, placeholder = { Text("192.168.1.1") },
-                              supportingText = { Text("Только если у роутера нестандартный адрес") })
+                              label = { Text("Адрес роутера (необязательно)") }, placeholder = { Text("192.168.1.1") })
             NkButton("Себе в Telegram", Modifier.fillMaxWidth(), enabled = routerOk, icon = Icons.Default.Send) {
                 act { Api.post("/v1/staff/bat/send", "to" to "me", "router" to router.trim().ifBlank { null }); "Отправлено вам в Telegram" }
             }
@@ -356,13 +358,7 @@ fun NewClientScreen(nav: Nav) {
         Loaded(load) { j ->
             LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
-                    NkCard(bg = NK.AccentSoft, border = NK.Accent) {
-                        Text("Как подключить нового клиента", fontWeight = FontWeight.SemiBold)
-                        Text("1. Отправьте батник (Ещё → Батник) и запустите его у клиента — роутер настроится сам.\n" +
-                             "2. Скрипт сам выдаст персональную ссылку на бота с пробным днём.\n" +
-                             "3. Если ссылка потерялась — выберите роутер ниже, и приложение сделает новую.",
-                             color = NK.AccentText, fontSize = 13.sp)
-                    }
+                    ru.nordkey.app.ui.setup.SetupHeroCard { nav.go(Scr.Setup) }
                 }
                 items(j.optJSONArray("clients").objects().filter { it.opt("owner_tg") == null || it.isNull("owner_tg") }) { c ->
                     RouterRow(c, extra = "без Telegram") {
@@ -430,13 +426,7 @@ fun AssistantScreen(nav: Nav, withBar: Boolean) {
         }
         LazyColumn(Modifier.weight(1f), state = list, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (msgs.isEmpty()) item {
-                NkCard {
-                    Text("Что умею", fontWeight = FontWeight.SemiBold)
-                    Text("• найти клиента по @нику, имени или адресу\n• проверить и починить роутер, сайт, DNS\n" +
-                         "• пустить сайт через VPN или напрямую\n• перенести или продлить подписку, написать клиенту — по кнопке\n" +
-                         "• выдать ещё устройство (конфиг), прислать конфиг заново, цена ×N\n• объединить в семейный доступ, переименовать роутер\n" +
-                         "• сложное — передам в Автопилот с готовым запросом для Claude", color = NK.Muted, fontSize = 14.sp)
-                }
+                HelpLink("Что умеет помощник", "agent")
             }
             items(msgs) { m ->
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = if (m.mine) Alignment.End else Alignment.Start,

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Router
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +31,12 @@ fun LoginScreen(onLoggedIn: (String) -> Unit) {
     var req by remember { mutableStateOf<JSONObject?>(null) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var setup by remember { mutableStateOf(false) }
+    if (setup) {
+        // первичная настройка: клиент сам подключает свой роутер, в конце — Telegram
+        ru.nordkey.app.ui.setup.SetupWizardScreen(onBack = { setup = false }, self = true)
+        return
+    }
 
     LaunchedEffect(req) {
         val r = req ?: return@LaunchedEffect
@@ -65,9 +72,6 @@ fun LoginScreen(onLoggedIn: (String) -> Unit) {
 
         val r = req
         if (r == null) {
-            Text("Вход — через вашего Telegram-бота NordKey. Пароль не нужен.", color = NK.Muted,
-                 textAlign = TextAlign.Center, fontSize = 15.sp)
-            Spacer(Modifier.height(20.dp))
             NkButton(if (busy) "Подключаюсь…" else "Войти через Telegram", enabled = !busy, modifier = Modifier.fillMaxWidth(),
                 onClick = {
                     busy = true; message = null
@@ -80,13 +84,20 @@ fun LoginScreen(onLoggedIn: (String) -> Unit) {
                         busy = false
                     }
                 })
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = { setup = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(50),
+                           border = androidx.compose.foundation.BorderStroke(1.dp, NK.Line)) {
+                Icon(Icons.Default.Router, null, tint = NK.Link); Spacer(Modifier.width(8.dp))
+                Text("Подключить роутер", color = NK.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(8.dp))
+            HelpLink("Как это работает", "setup")
         } else {
             NkCard {
                 Text("В Telegram нажмите это число:", color = NK.Muted, fontSize = 14.sp)
                 Text(r.optInt("pick").toString(), fontSize = 64.sp, fontWeight = FontWeight.Bold, color = NK.Link,
                      modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-                Text("Бот покажет три числа — выберите это. Так никто не сможет войти в ваш аккаунт по чужой ссылке.",
-                     color = NK.Muted, fontSize = 13.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { HelpLink("Зачем число?", "login") }
             }
             Spacer(Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
