@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.view.WindowCompat
 import ru.nordkey.app.data.Session
@@ -29,8 +30,8 @@ class MainActivity : ComponentActivity() {
             NordKeyTheme {
               // строка состояния и панель навигации — в цвет темы, значки тёмные на светлой
               SideEffect {
-                  window.statusBarColor = NK.Bg.toArgb()
-                  window.navigationBarColor = NK.Bar.toArgb()
+                  window.statusBarColor = (if (NK.dark) Color(0xFF0B1324) else Color(0xFFF7F9FE)).toArgb()
+                  window.navigationBarColor = (if (NK.dark) Color(0xFF070B14) else Color(0xFFEEF2F9)).toArgb()
                   WindowCompat.getInsetsController(window, window.decorView).apply {
                       isAppearanceLightStatusBars = !NK.dark
                       isAppearanceLightNavigationBars = !NK.dark

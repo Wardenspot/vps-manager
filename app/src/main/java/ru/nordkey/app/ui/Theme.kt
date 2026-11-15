@@ -20,20 +20,20 @@ data class Palette(
 )
 
 val DarkPalette = Palette(
-    bg = Color(0xFF0D1117), bar = Color(0xFF0F141A), surface = Color(0xFF161B22), surface2 = Color(0xFF1C232D),
-    line = Color(0xFF2A313C), divider = Color(0xFF222934), text = Color(0xFFE6EDF3), muted = Color(0xFF9BA6B4),
-    accent = Color(0xFF2F6FEB), accentSoft = Color(0xFF14233F), accentText = Color(0xFFA9C9FF), link = Color(0xFF7FB0FF),
-    ok = Color(0xFF3FD08A), okSoft = Color(0xFF12261C), okText = Color(0xFF7EE2B0),
-    warn = Color(0xFFF2A33A), warnSoft = Color(0xFF2A1E0E), warnLine = Color(0xFF5C4317), warnText = Color(0xFFF5B65A), warnLabel = Color(0xFFE9C891),
-    bad = Color(0xFFFF7A7A), badSoft = Color(0xFF3A1F22), off = Color(0xFF6B7684),
-    family = Color(0xFFC4A7FF), familySoft = Color(0xFF261D3D),
+    bg = Color(0xFF070B14), bar = Color(0xFF0C1424), surface = Color(0xFF111A2E), surface2 = Color(0xFF17223C),
+    line = Color(0xFF22304D), divider = Color(0xFF1B2742), text = Color(0xFFEAF1FF), muted = Color(0xFF8E9BB5),
+    accent = Color(0xFF3B7BFF), accentSoft = Color(0xFF14264A), accentText = Color(0xFFA9D8FF), link = Color(0xFF5CC8FF),
+    ok = Color(0xFF3FE0A0), okSoft = Color(0xFF0E2A25), okText = Color(0xFF7EEBC0),
+    warn = Color(0xFFFFB547), warnSoft = Color(0xFF2A1F10), warnLine = Color(0xFF5C4317), warnText = Color(0xFFFFC266), warnLabel = Color(0xFFE9C891),
+    bad = Color(0xFFFF6B7A), badSoft = Color(0xFF3A1A24), off = Color(0xFF5E6A82),
+    family = Color(0xFFC4A7FF), familySoft = Color(0xFF231C42),
 )
 
 val LightPalette = Palette(
-    bg = Color(0xFFF4F6FA), bar = Color(0xFFFFFFFF), surface = Color(0xFFFFFFFF), surface2 = Color(0xFFF0F3F8),
-    line = Color(0xFFE1E6EE), divider = Color(0xFFECEFF4), text = Color(0xFF111827), muted = Color(0xFF5B6576),
-    accent = Color(0xFF2F6FEB), accentSoft = Color(0xFFE7EFFE), accentText = Color(0xFF1E4FC2), link = Color(0xFF2563EB),
-    ok = Color(0xFF16A34A), okSoft = Color(0xFFE7F6EC), okText = Color(0xFF15803D),
+    bg = Color(0xFFF3F6FC), bar = Color(0xFFFFFFFF), surface = Color(0xFFFFFFFF), surface2 = Color(0xFFF2F5FB),
+    line = Color(0xFFE1E7F2), divider = Color(0xFFEDF0F6), text = Color(0xFF0F172A), muted = Color(0xFF5B6576),
+    accent = Color(0xFF2F6FEB), accentSoft = Color(0xFFE6EEFF), accentText = Color(0xFF1E4FC2), link = Color(0xFF1F6FEB),
+    ok = Color(0xFF12A96A), okSoft = Color(0xFFE5F7EF), okText = Color(0xFF0E8A57),
     warn = Color(0xFFD97706), warnSoft = Color(0xFFFFF5E3), warnLine = Color(0xFFF1D29E), warnText = Color(0xFFB45309), warnLabel = Color(0xFF9A5B12),
     bad = Color(0xFFDC2626), badSoft = Color(0xFFFDECEC), off = Color(0xFF9AA3AF),
     family = Color(0xFF7C3AED), familySoft = Color(0xFFF1EAFE),
@@ -68,6 +68,13 @@ object NK {
     val Off get() = palette.off
     val Family get() = palette.family
     val FamilySoft get() = palette.familySoft
+    /** Неоновый акцент нового дизайна (начало градиента кнопок и подсветки). */
+    val Cyan get() = if (dark) Color(0xFF35E0FF) else Color(0xFF0EA5E9)
+    val Glow get() = if (dark) Color(0xFF3B7BFF) else Color(0xFF2F6FEB)
+    /** Градиент главных кнопок и выбранных элементов. */
+    val Grad get() = listOf(Cyan, Glow)
+    /** Текст на градиентной кнопке. */
+    val OnGrad get() = if (dark) Color(0xFF041022) else Color.White
 }
 
 /** Выбор темы: как в системе / светлая / тёмная. Хранится в обычных настройках приложения. */
@@ -89,7 +96,7 @@ fun NordKeyTheme(dark: Boolean = when (ThemePref.mode) { ThemePref.LIGHT -> fals
     val p = if (dark) DarkPalette else LightPalette
     NK.palette = p
     val scheme = if (dark) darkColorScheme(
-        primary = Color(0xFF4A86F7), onPrimary = Color.White,
+        primary = Color(0xFF3B8BFF), onPrimary = Color.White,
         primaryContainer = p.accentSoft, onPrimaryContainer = p.accentText,
         secondaryContainer = p.accentSoft, onSecondaryContainer = p.accentText,
         surfaceContainerHighest = p.surface2, surfaceContainerLow = p.surface, surfaceContainerLowest = p.bg,

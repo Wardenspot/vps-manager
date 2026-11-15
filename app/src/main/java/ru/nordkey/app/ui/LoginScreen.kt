@@ -51,12 +51,12 @@ fun LoginScreen(onLoggedIn: (String) -> Unit) {
     }
 
     Column(
-        Modifier.fillMaxSize().background(NK.Bg).padding(24.dp),
+        Modifier.fillMaxSize().nkBackground().statusBarsPadding().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Box(Modifier.size(84.dp).clip(RoundedCornerShape(24.dp)).background(NK.AccentSoft), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.Key, null, tint = NK.Link, modifier = Modifier.size(44.dp))
+        Box(Modifier.size(88.dp).clip(RoundedCornerShape(26.dp)).background(androidx.compose.ui.graphics.Brush.linearGradient(NK.Grad)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.Key, null, tint = NK.OnGrad, modifier = Modifier.size(46.dp))
         }
         Spacer(Modifier.height(18.dp))
         Text("NordKey", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = NK.Text)
@@ -68,7 +68,7 @@ fun LoginScreen(onLoggedIn: (String) -> Unit) {
             Text("Вход — через вашего Telegram-бота NordKey. Пароль не нужен.", color = NK.Muted,
                  textAlign = TextAlign.Center, fontSize = 15.sp)
             Spacer(Modifier.height(20.dp))
-            Button(
+            NkButton(if (busy) "Подключаюсь…" else "Войти через Telegram", enabled = !busy, modifier = Modifier.fillMaxWidth(),
                 onClick = {
                     busy = true; message = null
                     scope.launch {
@@ -79,11 +79,7 @@ fun LoginScreen(onLoggedIn: (String) -> Unit) {
                         }
                         busy = false
                     }
-                },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(14.dp),
-            ) { Text(if (busy) "Подключаюсь…" else "Войти через Telegram", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+                })
         } else {
             NkCard {
                 Text("В Telegram нажмите это число:", color = NK.Muted, fontSize = 14.sp)

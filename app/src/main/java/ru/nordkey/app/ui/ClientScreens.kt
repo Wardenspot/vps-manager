@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -187,9 +188,7 @@ fun SubscriptionScreen(nav: Nav, withBar: Boolean) {
                     val dev = s?.optInt("devices", 0) ?: 0
                     if (dev > 1) Text("Устройств в подписке: $dev — продление сразу за все", color = NK.Text, fontSize = 14.sp)
                 }
-                Button(onClick = { openUrl(ctx, j.optString("pay_url")) }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-                    Text(if (active) "Продлить" else "Оформить подписку", fontSize = 16.sp)
-                }
+                NkButton(if (active) "Продлить" else "Оформить подписку", Modifier.fillMaxWidth()) { openUrl(ctx, j.optString("pay_url")) }
                 Text("Оплата проходит в Telegram-боте NordKey. После оплаты срок здесь обновится сам.", color = NK.Muted, fontSize = 13.sp)
                 Text("Ещё одно устройство (второй телефон, компьютер, сервер) — в боте: «📄 Мой конфиг» → «➕ Добавить устройство». " +
                      "Член семьи может видеть ваш роутер со своего Telegram бесплатно: «🛜 Мой роутер» → «👨‍👩‍👧 Семейный доступ».",
@@ -219,7 +218,7 @@ fun SupportScreen(nav: Nav) {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
                     Text(m.optString("text"), color = if (mine) Color.White else NK.Text, fontSize = 15.sp,
                          modifier = Modifier.widthIn(max = 320.dp).clip(RoundedCornerShape(14.dp))
-                             .background(if (mine) NK.Accent else NK.Surface).padding(12.dp))
+                             .background(if (mine) Brush.linearGradient(listOf(NK.Glow, Color(0xFF2E5BD8))) else Brush.linearGradient(listOf(NK.Surface2, NK.Surface))).padding(12.dp))
                 }
             }
             if (msgs.lastOrNull()?.optString("sender") == "client") item { Text("Проверяем…", color = NK.Muted) }

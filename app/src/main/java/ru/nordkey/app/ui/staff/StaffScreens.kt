@@ -205,9 +205,7 @@ fun UsersScreen(me: Me, nav: Nav) {
                     }
                 }
                 if (me.can("users.manage")) item {
-                    Button(onClick = { invite = true }, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Default.PersonAdd, null); Spacer(Modifier.width(6.dp)); Text("Пригласить сотрудника")
-                    }
+                    NkButton("Пригласить сотрудника", Modifier.fillMaxWidth(), icon = Icons.Default.PersonAdd) { invite = true }
                 }
             }
         }
@@ -292,9 +290,9 @@ fun BatScreen(nav: Nav) {
             OutlinedTextField(router, { router = it }, Modifier.fillMaxWidth(), singleLine = true, isError = !routerOk,
                               label = { Text("Адрес роутера (необязательно)") }, placeholder = { Text("192.168.1.1") },
                               supportingText = { Text("Только если у роутера нестандартный адрес") })
-            Button(enabled = routerOk, modifier = Modifier.fillMaxWidth(), onClick = {
+            NkButton("Себе в Telegram", Modifier.fillMaxWidth(), enabled = routerOk, icon = Icons.Default.Send) {
                 act { Api.post("/v1/staff/bat/send", "to" to "me", "router" to router.trim().ifBlank { null }); "Отправлено вам в Telegram" }
-            }) { Icon(Icons.Default.Send, null); Spacer(Modifier.width(6.dp)); Text("Себе в Telegram") }
+            }
             OutlinedButton(enabled = routerOk, modifier = Modifier.fillMaxWidth(), onClick = {
                 act { shareFile(ctx, "NordKey_setup.bat", Api.bytes("/v1/staff/bat$q"), title = "Отправить батник"); null }
             }) { Icon(Icons.Default.Share, null); Spacer(Modifier.width(6.dp)); Text("Поделиться (WhatsApp, почта…)") }
@@ -334,8 +332,7 @@ fun BroadcastScreen(nav: Nav) {
             preview?.optJSONArray("recipients").objects().take(30).joinToString(", ") { it.str("name") ?: it.optLong("tg_id").toString() }
                 .takeIf { it.isNotBlank() }?.let { Text(it, color = NK.Muted, fontSize = 12.sp) }
             OutlinedTextField(text, { text = it }, Modifier.fillMaxWidth(), minLines = 5, label = { Text("Текст сообщения") })
-            Button(enabled = text.isNotBlank() && (preview?.optInt("count") ?: 0) > 0, modifier = Modifier.fillMaxWidth(),
-                   onClick = { confirm = true }) { Text("Отправить") }
+            NkButton("Отправить", Modifier.fillMaxWidth(), enabled = text.isNotBlank() && (preview?.optInt("count") ?: 0) > 0) { confirm = true }
         }
     }
     if (confirm) ConfirmDialog("Отправить рассылку?", "Сообщение уйдёт ${preview?.optInt("count")} получателям от бота NordKey.", "Отправить",

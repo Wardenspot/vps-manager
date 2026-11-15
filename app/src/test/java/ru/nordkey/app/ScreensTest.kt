@@ -94,7 +94,7 @@ class ScreensTest {
     private fun snap(name: String, content: @Composable () -> Unit) {
         for (dark in listOf(false, true)) {
             paparazzi.snapshot(name = name + if (dark) "_dark" else "_light") {
-                NordKeyTheme(dark = dark) { Surface(Modifier.fillMaxSize(), color = NK.Bg, contentColor = NK.Text) { content() } }
+                NordKeyTheme(dark = dark) { Surface(Modifier.fillMaxSize().nkBackground(), color = androidx.compose.ui.graphics.Color.Transparent, contentColor = NK.Text) { content() } }
             }
         }
     }
