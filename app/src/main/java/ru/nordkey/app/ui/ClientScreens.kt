@@ -296,6 +296,7 @@ fun MoreScreen(me: Me, nav: Nav, onLogout: () -> Unit, reloadMe: () -> Unit) {
                 if (me.can("newclient")) MenuItem("Новый клиент — ссылка на бота", Icons.Default.PersonAdd) { nav.go(Scr.NewClient) }
                 if (me.can("bat")) MenuItem("Батник для настройки роутера", Icons.Default.Description) { nav.go(Scr.Bat) }
                 if (me.can("broadcast")) MenuItem("Рассылка клиентам", Icons.Default.Campaign) { nav.go(Scr.Broadcast) }
+                if (me.can("clients.view")) MenuItem("Пользователи приложения", Icons.Default.PhoneAndroid) { nav.go(Scr.AppUsers) }
                 if (me.can("users.view")) MenuItem("Сотрудники и роли", Icons.Default.Groups) { nav.go(Scr.Users) }
                 if (me.can("audit.view")) MenuItem("Журнал действий", Icons.Default.History) { nav.go(Scr.Audit) }
                 SectionTitle("Моё")

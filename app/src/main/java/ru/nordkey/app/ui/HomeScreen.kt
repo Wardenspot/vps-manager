@@ -48,6 +48,7 @@ sealed interface Scr {
     data object SupportInbox : Scr
     data object Setup : Scr
     data object Help : Scr
+    data object AppUsers : Scr
 }
 
 class Nav(private val stack: SnapshotStateList<Scr>) {
@@ -75,12 +76,14 @@ fun HomeScreen(onLogout: () -> Unit) {
     val stack = remember { mutableStateListOf<Scr>() }
     val nav = remember { Nav(stack) }
     BackHandler(enabled = stack.isNotEmpty()) { nav.back() }
+    // состояние вкладок и экранов (выбранная вкладка, фильтры, прокрутка) переживает уход на вложенный экран и «Назад»
+    val saved = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
 
     Box(Modifier.fillMaxSize().nkBackground()) {
         Loaded(meLoad) { json ->
             val me = remember(json) { Me(json) }
             val top = stack.lastOrNull()
-            if (top != null) {
+            if (top != null) saved.SaveableStateProvider("s${stack.size}:$top") {
                 when (top) {
                     is Scr.Router -> RouterScreen(top.ip, me, nav)
                     Scr.MyRouters -> MyRoutersScreen(me, nav, withBar = true)
@@ -99,8 +102,9 @@ fun HomeScreen(onLogout: () -> Unit) {
                     Scr.SupportInbox -> SupportInboxScreen(nav)
                     Scr.Setup -> ru.nordkey.app.ui.setup.SetupWizardScreen(onBack = nav::back)
                     Scr.Help -> HelpScreen(me, nav)
+                    Scr.AppUsers -> ru.nordkey.app.ui.staff.AppUsersScreen(nav)
                 }
-            } else {
+            } else saved.SaveableStateProvider("tabs") {
                 Tabs(me, json, nav, onLogout, meLoad.reload)
             }
         }

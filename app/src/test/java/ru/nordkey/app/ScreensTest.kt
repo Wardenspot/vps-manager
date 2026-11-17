@@ -1,6 +1,8 @@
 package ru.nordkey.app
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
@@ -132,5 +134,18 @@ class ScreensTest {
         error = "Неверный логин или пароль роутера."))
     @Test fun login() = snap("login") { ru.nordkey.app.ui.LoginScreen {} }
     @Test fun help() = snap("help") { ru.nordkey.app.ui.HelpScreen(null, nav()) }
+    @Test fun appUsers() = snap("app_users") {
+        val now = System.currentTimeMillis() / 1000
+        androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(16.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+            listOf(
+                """{"tg_id":1,"name":"Анастасия","username":"nastya","role":"client","last_seen":${now - 60},"routers":[],"subscription":{"active":true,"days_left":27},
+                    "devices":[{"device":"ПК Nemavan","pc":true,"last_seen":${now - 60}},{"device":"Xiaomi 23090RA98G","pc":false,"last_seen":${now - 4000}}]}""",
+                """{"tg_id":2,"name":"Игорь","role":"client","last_seen":${now - 90000},"routers":["10.66.66.21"],"subscription":{"active":true,"days_left":2},
+                    "devices":[{"device":"samsung SM-S721B","pc":false,"last_seen":${now - 90000}}]}""",
+                """{"tg_id":3,"username":"pc_user","role":"client","last_seen":${now - 900000},"routers":[],"subscription":null,
+                    "devices":[{"device":"ПК DESKTOP-QUDVKJU","pc":true,"last_seen":${now - 900000}}]}""",
+            ).forEach { ru.nordkey.app.ui.staff.AppUserRow(org.json.JSONObject(it)) {} }
+        }
+    }
     @Test fun dashboardHero() = snap("setup_hero") { SetupHeroCard {} }
 }
