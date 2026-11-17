@@ -82,6 +82,8 @@ const P = {
   add: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
   next: 'M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z',
   sort: 'M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z',
+  phone: 'M16 1H8C6.34 1 5 2.34 5 4v16c0 1.66 1.34 3 3 3h8c1.66 0 3-1.34 3-3V4c0-1.66-1.34-3-3-3zm-2 20h-4v-1h4v1zm3.25-3H6.75V4h10.5v14z',
+  pc: 'M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z',
   more: 'M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z',
   less: 'M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z',
   help: 'M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z',
@@ -708,6 +710,7 @@ function moreScreen() {
       can('newclient') ? item('Новый клиент — ссылка на бота', 'add', () => go(newClientScreen)) : null,
       can('bat') ? item('Батник для настройки роутера', 'doc', () => go(batScreen)) : null,
       can('broadcast') ? item('Рассылка клиентам', 'campaign', () => go(broadcastScreen)) : null,
+    can('clients.view') ? item('Пользователи приложения', 'phone', () => go(appUsersScreen)) : null,
       can('users.view') ? item('Сотрудники и роли', 'badge', () => go(usersScreen)) : null,
       can('audit.view') ? item('Журнал действий', 'history', () => go(auditScreen)) : null,
       h('div.sect', 'Моё'),
@@ -1262,4 +1265,47 @@ function groupCard(g) {
       s ? h('div.small', { style: { color: s.active ? 'var(--muted)' : 'var(--warn-text)' } }, s.active ? 'до ' + dateRu(s.expires_at).slice(0, 5) : 'нет подписки') : null),
     chev), body);
   return card;
+}
+
+// все, кто входил в приложение: телефоны и компьютеры, последний вход, подписка, есть ли роутер
+function seenRu(ts) {
+  if (!ts) return '—';
+  const d = Date.now() / 1000 - ts;
+  if (d < 300) return 'сейчас';
+  if (d < 3600) return Math.floor(d / 60) + ' мин назад';
+  const t = new Date(ts * 1000), today = new Date(); today.setHours(0, 0, 0, 0);
+  const hm = t.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+  if (t >= today) return 'сегодня ' + hm;
+  if (t >= today - 86400000) return 'вчера ' + hm;
+  return t.toLocaleDateString('ru', { day: '2-digit', month: '2-digit' });
+}
+function appUsersScreen() {
+  const pg = page('Пользователи приложения', { refresh: () => load() });
+  let all = [], q = '', filter = 'all';
+  const F = { all: () => true, pc: u => u.devices.some(d => d.pc), phone: u => u.devices.some(d => !d.pc), norouter: u => !(u.routers || []).length };
+  const inp = h('input.in', { placeholder: 'Имя, @ник или устройство', oninput: e => { q = e.target.value.trim().toLowerCase().replace(/^@/, ''); paint(); } });
+  const chips = h('div.seg'), list = h('div.col');
+  function row(u) {
+    const fresh = Date.now() / 1000 - u.last_seen < 900, r = (u.routers || []).length;
+    return h('div.card.click', { onclick: () => go(accountScreen, u.tg_id) },
+      h('div.row', daysRing(u.subscription),
+        h('div.grow', h('div.t', u.name || (u.username ? '@' + u.username : 'ID ' + u.tg_id)),
+          h('div.small.muted', [u.username ? '@' + u.username : null, u.role !== 'client' ? u.role_name : null].filter(Boolean).join(' · ') || 'клиент')),
+        h('div', { style: { textAlign: 'right' } },
+          h('div.t.row', { style: { justifyContent: 'flex-end', gap: '6px', color: fresh ? 'var(--ok-text)' : 'var(--muted)' } },
+            fresh ? h('span.dot', { style: { width: '8px', height: '8px', background: 'var(--ok)' } }) : null, seenRu(u.last_seen)),
+          h('div.small', { style: { color: r ? 'var(--muted)' : 'var(--link)' } }, r ? `${r} ${plural(r, 'роутер', 'роутера', 'роутеров')}` : 'без роутера'))),
+      h('div.row', { style: { flexWrap: 'wrap', gap: '6px', marginTop: '8px' } }, u.devices.map(d =>
+        h('span.chip', ico(d.pc ? 'pc' : 'phone'), ' ' + String(d.device).replace(/^ПК /, '').slice(0, 24)))));
+  }
+  function paint() {
+    chips.replaceChildren(...[['all', 'Все'], ['pc', 'Компьютер'], ['phone', 'Телефон'], ['norouter', 'Без роутера']].map(([k, t]) =>
+      h('button' + (filter === k ? '.on' : ''), { onclick: () => { filter = k; paint(); } }, `${t} ${all.filter(F[k]).length}`)));
+    const shown = all.filter(u => F[filter](u) && (!q || [u.name, u.username, ...u.devices.map(d => d.device)].some(x => String(x || '').toLowerCase().includes(q))));
+    list.replaceChildren(...(shown.length ? shown.map(row) : [h('div.muted', 'Никого не нашлось')]));
+  }
+  async function load() { try { all = (await api.get('/v1/staff/appusers')).users || []; paint(); } catch (e) { list.replaceChildren(h('div.warnc', e.message)); } }
+  pg.body.append(h('div.center.col', inp, chips, list));
+  load();
+  return pg;
 }
